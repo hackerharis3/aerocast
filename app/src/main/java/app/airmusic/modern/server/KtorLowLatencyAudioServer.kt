@@ -439,6 +439,10 @@ class KtorLowLatencyAudioServer(
                     p { color: #AAAAAA; margin: 4px 0 20px; overflow-wrap: anywhere; }
                     button { background: linear-gradient(135deg, #FF7043, #7C4DFF); color: #FFF; border: none; padding: 14px 28px; border-radius: 14px; font-size: 16px; font-weight: 600; cursor: pointer; width: 100%; }
                     .status { font-size: 13px; color: #9E9E9E; margin-top: 16px; min-height: 1.4em; }
+                    .modes { display: flex; gap: 8px; margin-top: 14px; }
+                    .modes button { background: #2A2A2A; font-size: 13px; padding: 10px 6px; border-radius: 10px; font-weight: 500; }
+                    .modes button.on { background: #FF7043; }
+                    .hint { font-size: 12px; color: #777; margin-top: 8px; }
                 </style>
             </head>
             <body>
@@ -447,12 +451,31 @@ class KtorLowLatencyAudioServer(
                     <h2>${htmlEscape(title)}</h2>
                     <p>${htmlEscape(artist)}</p>
                     <button id="playBtn" onclick="toggleStream()">Start listening</button>
+                    <div class="modes">
+                        <button id="m-low" onclick="setMode('low')">Low delay</button>
+                        <button id="m-normal" onclick="setMode('normal')">Normal</button>
+                        <button id="m-smooth" onclick="setMode('smooth')">Smooth</button>
+                    </div>
+                    <div class="hint">Hear gaps? Pick Smooth. Want it tighter? Pick Low delay.</div>
                     <div class="status" id="status">Tap the button to hear this phone's audio here.</div>
                 </div>
                 <script>
-                    const TARGET_BUFFER = 0.20;   // seconds of audio kept queued
-                    const MAX_BUFFER = 0.60;      // drop back to target if we fall this far behind
-                    let audioCtx = null, ws = null, nextStartTime = 0, packets = 0, wantPlaying = false;
+                    // Seconds of audio kept queued per mode. Less = lower delay but more risk of gaps on busy Wi-Fi.
+                    const MODES = { low: 0.08, normal: 0.15, smooth: 0.35 };
+                    let mode = 'normal';
+                    try { mode = localStorage.getItem('aerocastMode') || 'normal'; } catch (e) {}
+                    if (!(mode in MODES)) mode = 'normal';
+                    let audioCtx = null, ws = null, nextStartTime = 0, packets = 0, wantPlaying = false, gaps = 0, resync = false;
+
+                    function setMode(m) {
+                        mode = m;
+                        resync = true;   // a bigger buffer is added on the next packet
+                        try { localStorage.setItem('aerocastMode', m); } catch (e) {}
+                        for (const k of Object.keys(MODES)) {
+                            document.getElementById('m-' + k).classList.toggle('on', k === m);
+                        }
+                    }
+                    setMode(mode);
 
                     function setStatus(t) { document.getElementById('status').innerText = t; }
                     function setButton(t) { document.getElementById('playBtn').innerText = t; }
@@ -474,7 +497,7 @@ class KtorLowLatencyAudioServer(
                             audioCtx = new (window.AudioContext || window.webkitAudioContext)(); // e.g. older Safari
                         }
                         audioCtx.resume();
-                        nextStartTime = 0; packets = 0;
+                        nextStartTime = 0; packets = 0; gaps = 0;
                         setButton('Stop listening');
                         setStatus('Connecting…');
                         const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
@@ -497,13 +520,30 @@ class KtorLowLatencyAudioServer(
                             src.buffer = buf;
                             src.connect(audioCtx.destination);
                             const now = audioCtx.currentTime;
-                            if (nextStartTime < now || nextStartTime - now > MAX_BUFFER) {
-                                nextStartTime = now + TARGET_BUFFER;   // (re)start with a safe cushion
+                            const target = MODES[mode];
+                            let lag = nextStartTime - now;
+                            if (lag < 0.005) {
+                                // Ran dry (Wi-Fi hiccup) or first packet: restart with the mode's cushion.
+                                if (packets > 0) gaps++;
+                                nextStartTime = now + target;
+                                lag = target;
+                            } else if (resync && lag < target) {
+                                nextStartTime = now + target;          // grow to the new mode's cushion
+                                lag = target;
+                            } else if (lag > target + 0.5) {
+                                nextStartTime = now + target;          // far behind (e.g. tab was paused): jump
+                                lag = target;
                             }
+                            // Behind target: play ~3% faster until caught up (inaudible), instead of
+                            // staying behind for good.
+                            resync = false;
+                            const rate = lag > target + 0.03 ? 1.03 : 1.0;
+                            src.playbackRate.value = rate;
                             src.start(nextStartTime);
-                            nextStartTime += buf.duration;
+                            nextStartTime += buf.duration / rate;
                             if (++packets % 25 === 0) {
-                                setStatus('Playing • about ' + Math.round((nextStartTime - now) * 1000) + ' ms behind the phone');
+                                setStatus('Playing • about ' + Math.round(lag * 1000) + ' ms behind the phone' +
+                                    (gaps ? ' • ' + gaps + (gaps === 1 ? ' gap' : ' gaps') : ''));
                             }
                         };
                     }
