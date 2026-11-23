@@ -8,6 +8,7 @@ class AirMusicModernApp : Application() {
 
     override fun onCreate() {
         super.onCreate()
+        app.airmusic.modern.ui.ThemePreferences.applySaved(this)
         createNotificationChannel()
         // Starts discovery (mDNS + SSDP), the Ktor stream server, DACP, Snapcast and sink wiring.
         AirMusicRuntimeCoordinator.initialize(this)

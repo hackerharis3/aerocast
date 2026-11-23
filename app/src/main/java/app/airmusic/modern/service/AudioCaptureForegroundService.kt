@@ -143,7 +143,7 @@ class AudioCaptureForegroundService : Service() {
 
         val metadata = MediaSessionMetadataListener.metadataFlow.value
         val notification: Notification = NotificationCompat.Builder(this, AirMusicModernApp.NOTIFICATION_CHANNEL_ID)
-            .setSmallIcon(android.R.drawable.ic_lock_silent_mode_off)
+            .setSmallIcon(app.airmusic.modern.R.drawable.ic_stat_airmusic)
             .setContentTitle("Casting: ${metadata.title}")
             .setContentText("${metadata.artist} • 44.1 kHz Stereo (352-frame sync)")
             .setContentIntent(pendingOpen)

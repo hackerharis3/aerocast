@@ -1,5 +1,17 @@
 package app.airmusic.modern.ui
 
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Apps
+import androidx.compose.material.icons.filled.Equalizer
+import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Speaker
+import androidx.compose.material.icons.outlined.Apps
+import androidx.compose.material.icons.outlined.Equalizer
+import androidx.compose.material.icons.outlined.Settings
+import androidx.compose.material.icons.outlined.Speaker
+import androidx.compose.material3.Icon
+import androidx.compose.ui.graphics.vector.ImageVector
 import android.Manifest
 import android.app.Activity
 import android.content.pm.ApplicationInfo
@@ -72,6 +84,8 @@ import app.airmusic.modern.ui.screens.MixerAndEqScreen
 import app.airmusic.modern.ui.screens.ModernSettingsScreen
 import app.airmusic.modern.ui.screens.ReceiversGridScreen
 import kotlin.math.pow
+
+private data class NavTab(val label: String, val selectedIcon: ImageVector, val icon: ImageVector)
 
 data class InstalledMediaApp(val label: String, val packageName: String, val uid: Int)
 
@@ -148,8 +162,14 @@ fun AdaptiveAirMusicAppShell(
     filterMode: AppUidFilterMode,
     onUpdateUidFilter: (AppUidFilterMode, Set<Int>) -> Unit
 ) {
-    var activeTab by remember { mutableIntStateOf(0) }
-    val navTabs = listOf("Receivers", "Mixer & 10-Band EQ", "App Isolation", "Settings")
+    // rememberSaveable: keep the tab when the screen is rebuilt (e.g. after a theme change).
+    var activeTab by rememberSaveable { mutableIntStateOf(0) }
+    val navTabs = listOf(
+        NavTab("Receivers", Icons.Filled.Speaker, Icons.Outlined.Speaker),
+        NavTab("Mixer & EQ", Icons.Filled.Equalizer, Icons.Outlined.Equalizer),
+        NavTab("App Isolation", Icons.Filled.Apps, Icons.Outlined.Apps),
+        NavTab("Settings", Icons.Filled.Settings, Icons.Outlined.Settings)
+    )
     val connectedCount = receivers.count { it.isConnected }
 
     BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
@@ -168,12 +188,17 @@ fun AdaptiveAirMusicAppShell(
                     NowCastingWaveformBar(metadata = metadata, telemetry = telemetry)
                     if (!useTabletNavigationRail) {
                         NavigationBar {
-                            navTabs.forEachIndexed { index, label ->
+                            navTabs.forEachIndexed { index, tab ->
                                 NavigationBarItem(
                                     selected = activeTab == index,
                                     onClick = { activeTab = index },
-                                    icon = {},
-                                    label = { Text(label) }
+                                    icon = {
+                                        Icon(
+                                            imageVector = if (activeTab == index) tab.selectedIcon else tab.icon,
+                                            contentDescription = null
+                                        )
+                                    },
+                                    label = { Text(tab.label, maxLines = 1) }
                                 )
                             }
                         }
@@ -188,12 +213,17 @@ fun AdaptiveAirMusicAppShell(
             ) {
                 if (useTabletNavigationRail) {
                     NavigationRail(modifier = Modifier.fillMaxHeight()) {
-                        navTabs.forEachIndexed { index, label ->
+                        navTabs.forEachIndexed { index, tab ->
                             NavigationRailItem(
                                 selected = activeTab == index,
                                 onClick = { activeTab = index },
-                                icon = {},
-                                label = { Text(label) }
+                                icon = {
+                                    Icon(
+                                        imageVector = if (activeTab == index) tab.selectedIcon else tab.icon,
+                                        contentDescription = null
+                                    )
+                                },
+                                label = { Text(tab.label, maxLines = 1) }
                             )
                         }
                     }

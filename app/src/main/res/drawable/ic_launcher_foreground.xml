@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- AirMusic launcher foreground: a music note sending sound waves through the air.
+     Content stays inside the 66dp adaptive-icon safe zone (x/y 21..87). -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Note head -->
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M41.5,67m-7.5,0a7.5,7.5 0,1 1,15 0a7.5,7.5 0,1 1,-15 0" />
+    <!-- Stem -->
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M46,34h4.5v33h-4.5z" />
+    <!-- Flag -->
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M50.5,34C56,36 60,40 60,46C60,49 58.5,51.5 57,53C57.5,50 56.5,45 50.5,43Z" />
+    <!-- Inner wave -->
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="#FFFFFFFF"
+        android:strokeWidth="4.5"
+        android:strokeLineCap="round"
+        android:pathData="M67.07,50.93A10,10 0,0 1,67.07 65.07" />
+    <!-- Outer wave -->
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="#FFFFFFFF"
+        android:strokeAlpha="0.85"
+        android:strokeWidth="4.5"
+        android:strokeLineCap="round"
+        android:pathData="M72.02,45.98A17,17 0,0 1,72.02 70.02" />
+</vector>

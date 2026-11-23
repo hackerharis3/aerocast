@@ -40,6 +40,8 @@
         android:allowBackup="false"
         android:dataExtractionRules="@xml/data_extraction_rules"
         android:fullBackupContent="false"
+        android:icon="@mipmap/ic_launcher"
+        android:roundIcon="@mipmap/ic_launcher_round"
         android:label="AirMusic Modern"
         android:supportsRtl="true"
         android:theme="@style/Theme.AppCompat.DayNight.NoActionBar"
@@ -80,7 +82,7 @@
             android:name=".service.QuickSettingsCastingTileService"
             android:enabled="true"
             android:exported="true"
-            android:icon="@android:drawable/ic_lock_silent_mode_off"
+            android:icon="@drawable/ic_stat_airmusic"
             android:label="AirMusic Cast"
             android:permission="android.permission.BIND_QUICK_SETTINGS_TILE">
             <intent-filter>
