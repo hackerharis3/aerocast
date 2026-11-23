@@ -1,5 +1,11 @@
 package app.airmusic.modern.ui.components
 
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.material3.rememberModalBottomSheetState
+import android.content.Intent
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.ui.platform.LocalContext
 import android.graphics.Bitmap
 import android.graphics.Color
 import androidx.compose.foundation.Image
@@ -33,25 +39,32 @@ import com.google.zxing.qrcode.QRCodeWriter
 @Composable
 fun QrStreamShareSheet(
     listenUrl: String,
+    isCapturing: Boolean,
     onDismiss: () -> Unit
 ) {
+    val context = LocalContext.current
     val qrBitmap = remember(listenUrl) { generateQrCodeBitmap(listenUrl, 512) }
 
-    ModalBottomSheet(onDismissRequest = onDismiss) {
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        // Open fully so the address, warning and Share button are visible without dragging.
+        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
+                .verticalScroll(rememberScrollState())
                 .padding(horizontal = 24.dp, vertical = 16.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             Text(
-                text = "Scan to Join Live Audio (<50ms WebSocket)",
+                text = "Listen in a browser",
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.Bold
             )
             Text(
-                text = "Point any phone, tablet, or smart TV camera on your Wi-Fi network at this QR code to open the synchronized Web Audio player.",
+                text = "Scan this code with any phone, tablet or computer on the same Wi-Fi, or open the address below in a browser.",
                 style = MaterialTheme.typography.bodySmall
             )
             Surface(
@@ -60,7 +73,7 @@ fun QrStreamShareSheet(
             ) {
                 Image(
                     bitmap = qrBitmap.asImageBitmap(),
-                    contentDescription = "Live Audio Stream QR Code",
+                    contentDescription = "QR code for the listening page",
                     modifier = Modifier
                         .size(220.dp)
                         .padding(12.dp)
@@ -71,6 +84,22 @@ fun QrStreamShareSheet(
                 style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.primary
             )
+            if (!isCapturing) {
+                Text(
+                    text = "Audio capture is off. Start capturing on the App Isolation tab so listeners can hear something.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.error
+                )
+            }
+            OutlinedButton(onClick = {
+                val send = Intent(Intent.ACTION_SEND).apply {
+                    type = "text/plain"
+                    putExtra(Intent.EXTRA_TEXT, listenUrl)
+                }
+                context.startActivity(Intent.createChooser(send, "Share listening link"))
+            }) {
+                Text("Share link")
+            }
             Spacer(modifier = Modifier.height(16.dp))
         }
     }

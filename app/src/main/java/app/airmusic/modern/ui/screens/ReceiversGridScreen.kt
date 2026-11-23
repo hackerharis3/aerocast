@@ -1,5 +1,13 @@
 package app.airmusic.modern.ui.screens
 
+import app.airmusic.modern.AirMusicRuntimeCoordinator
+import app.airmusic.modern.service.AudioCaptureForegroundService
+import app.airmusic.modern.ui.components.QrStreamShareSheet
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.QrCode2
+import androidx.compose.material3.Icon
+import androidx.compose.foundation.layout.size
+import androidx.compose.runtime.collectAsState
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -61,6 +69,8 @@ fun ReceiversGridScreen(
     modifier: Modifier = Modifier
 ) {
     var showAddManualAirPlayDialog by remember { mutableStateOf(false) }
+    var showListenSheet by remember { mutableStateOf(false) }
+    val telemetry by AudioCaptureForegroundService.telemetryFlow.collectAsState()
 
     LazyVerticalGrid(
         columns = GridCells.Adaptive(minSize = 330.dp),
@@ -75,7 +85,8 @@ fun ReceiversGridScreen(
                 activeReceiverIds = receivers.filter { it.isConnected }.map { it.id }.toSet(),
                 onSelectGroup = { MultiRoomStateRepository.activateQuickConnectGroup(it) },
                 onDisconnectAll = { MultiRoomStateRepository.disconnectAllReceivers() },
-                onAddManualAirPlay = { showAddManualAirPlayDialog = true }
+                onAddManualAirPlay = { showAddManualAirPlayDialog = true },
+                onListenInBrowser = { showListenSheet = true }
             )
         }
 
@@ -97,6 +108,14 @@ fun ReceiversGridScreen(
         }
     }
 
+    if (showListenSheet) {
+        QrStreamShareSheet(
+            listenUrl = AirMusicRuntimeCoordinator.ktorServer.buildQrWebListenUrl(),
+            isCapturing = telemetry.isCapturing,
+            onDismiss = { showListenSheet = false }
+        )
+    }
+
     if (showAddManualAirPlayDialog) {
         ManualAirPlayDeviceDialog(
             onDismiss = { showAddManualAirPlayDialog = false },
@@ -114,7 +133,8 @@ private fun QuickConnectGroupsBanner(
     activeReceiverIds: Set<String>,
     onSelectGroup: (QuickConnectGroup) -> Unit,
     onDisconnectAll: () -> Unit,
-    onAddManualAirPlay: () -> Unit
+    onAddManualAirPlay: () -> Unit,
+    onListenInBrowser: () -> Unit
 ) {
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -132,6 +152,11 @@ private fun QuickConnectGroupsBanner(
             ) {
                 TextButton(onClick = onAddManualAirPlay) {
                     Text("+ Manual AirPlay", maxLines = 1)
+                }
+                TextButton(onClick = onListenInBrowser) {
+                    Icon(Icons.Outlined.QrCode2, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text("Listen in browser", maxLines = 1)
                 }
                 if (activeReceiverIds.isNotEmpty()) {
                     TextButton(onClick = onDisconnectAll) {

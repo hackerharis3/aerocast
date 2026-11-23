@@ -346,90 +346,125 @@ class KtorLowLatencyAudioServer(
             return bytes.joinToString("") { "%02x".format(it) }
         }
 
+        /**
+         * The phone's address on the local network (what speakers and browsers must reach).
+         * Prefers Wi-Fi / hotspot / Ethernet interfaces with a private address, so a mobile-data
+         * interface (rmnet, ccmni, ...) or a VPN tunnel is never picked just because it's listed first.
+         */
         fun resolveLocalLanIpv4(): String {
             try {
-                val interfaces = NetworkInterface.getNetworkInterfaces() ?: return "127.0.0.1"
-                for (nif in interfaces) {
-                    if (!nif.isUp || nif.isLoopback) continue
-                    for (addr in nif.inetAddresses) {
-                        if (addr is Inet4Address && !addr.isLoopbackAddress) {
-                            return addr.hostAddress ?: "127.0.0.1"
-                        }
+                val candidates = NetworkInterface.getNetworkInterfaces()?.toList().orEmpty()
+                    .filter { it.isUp && !it.isLoopback }
+                    .flatMap { nif ->
+                        nif.inetAddresses.toList()
+                            .filterIsInstance<Inet4Address>()
+                            .filter { !it.isLoopbackAddress }
+                            .map { nif.name.lowercase() to it }
                     }
+                fun score(name: String, addr: Inet4Address): Int {
+                    var sc = 0
+                    if (name.startsWith("wlan") || name.startsWith("ap") || name.startsWith("swlan") ||
+                        name.startsWith("eth")) sc += 10
+                    if (name.startsWith("rmnet") || name.startsWith("ccmni") || name.startsWith("tun") ||
+                        name.startsWith("dummy") || name.startsWith("clat")) sc -= 10
+                    if (addr.isSiteLocalAddress) sc += 5
+                    return sc
                 }
+                candidates.maxByOrNull { (name, addr) -> score(name, addr) }?.second?.hostAddress?.let { return it }
             } catch (_: Throwable) {
             }
             return "127.0.0.1"
         }
 
+        private fun htmlEscape(s: String): String = s
+            .replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+            .replace("\"", "&quot;").replace("'", "&#39;")
+
+        /**
+         * Browser player for the raw 16-bit 44.1 kHz stereo PCM WebSocket stream.
+         * Keeps ~200 ms of audio buffered: enough to ride out normal Wi-Fi jitter without dropouts.
+         */
         private fun buildWebAudioPlayerHtml(token: String, title: String, artist: String): String = """
             <!DOCTYPE html>
             <html lang="en">
             <head>
                 <meta charset="UTF-8" />
                 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-                <title>Aerocast • Sub-50ms Live Stream</title>
+                <title>Aerocast • Listen</title>
                 <style>
-                    body { font-family: system-ui, sans-serif; background: #121212; color: #FFFFFF; display: flex; align-items: center; justify-content: center; min-height: 100vh; margin: 0; }
-                    .card { background: #1E1E1E; padding: 28px; border-radius: 20px; max-width: 420px; width: 90%; text-align: center; box-shadow: 0 12px 32px rgba(0,0,0,0.45); }
-                    .badge { display: inline-block; background: #FF5722; color: #FFF; font-size: 12px; font-weight: 700; padding: 4px 10px; border-radius: 99px; margin-bottom: 12px; }
-                    h2 { margin: 6px 0; font-size: 22px; }
-                    p { color: #AAAAAA; margin: 4px 0 20px; }
-                    button { background: #7C4DFF; color: #FFF; border: none; padding: 14px 28px; border-radius: 14px; font-size: 16px; font-weight: 600; cursor: pointer; width: 100%; }
-                    .stats { font-family: monospace; font-size: 12px; color: #888; margin-top: 16px; }
+                    :root { color-scheme: dark; }
+                    body { font-family: system-ui, sans-serif; background: #121212; color: #FFFFFF; display: flex; align-items: center; justify-content: center; min-height: 100vh; margin: 0; padding: 16px; box-sizing: border-box; }
+                    .card { background: #1E1E1E; padding: 28px; border-radius: 20px; max-width: 420px; width: 100%; text-align: center; box-shadow: 0 12px 32px rgba(0,0,0,0.45); }
+                    .brand { font-size: 13px; font-weight: 700; letter-spacing: .08em; color: #FF7043; margin-bottom: 12px; text-transform: uppercase; }
+                    h2 { margin: 6px 0; font-size: 22px; overflow-wrap: anywhere; }
+                    p { color: #AAAAAA; margin: 4px 0 20px; overflow-wrap: anywhere; }
+                    button { background: linear-gradient(135deg, #FF7043, #7C4DFF); color: #FFF; border: none; padding: 14px 28px; border-radius: 14px; font-size: 16px; font-weight: 600; cursor: pointer; width: 100%; }
+                    .status { font-size: 13px; color: #9E9E9E; margin-top: 16px; min-height: 1.4em; }
                 </style>
             </head>
             <body>
                 <div class="card">
-                    <span class="badge">WEBSOCKET 44.1 kHz STEREO PCM</span>
-                    <h2 id="trackTitle">$title</h2>
-                    <p id="trackArtist">$artist</p>
-                    <button id="playBtn" onclick="toggleStream()">Tap to Start Low-Latency Audio</button>
-                    <div class="stats" id="statsText">Status: Ready (352-sample frame sync)</div>
+                    <div class="brand">Aerocast</div>
+                    <h2>${htmlEscape(title)}</h2>
+                    <p>${htmlEscape(artist)}</p>
+                    <button id="playBtn" onclick="toggleStream()">Start listening</button>
+                    <div class="status" id="status">Tap the button to hear this phone's audio here.</div>
                 </div>
                 <script>
-                    let audioCtx = null;
-                    let ws = null;
-                    let nextStartTime = 0;
-                    let packetsReceived = 0;
+                    const TARGET_BUFFER = 0.20;   // seconds of audio kept queued
+                    const MAX_BUFFER = 0.60;      // drop back to target if we fall this far behind
+                    let audioCtx = null, ws = null, nextStartTime = 0, packets = 0, wantPlaying = false;
+
+                    function setStatus(t) { document.getElementById('status').innerText = t; }
+                    function setButton(t) { document.getElementById('playBtn').innerText = t; }
+
+                    function stop(message) {
+                        wantPlaying = false;
+                        if (ws) { ws.onclose = null; ws.close(); ws = null; }
+                        if (audioCtx) { audioCtx.close(); audioCtx = null; }
+                        setButton('Start listening');
+                        setStatus(message || 'Stopped.');
+                    }
 
                     function toggleStream() {
-                        if (ws) {
-                            ws.close();
-                            ws = null;
-                            document.getElementById('playBtn').innerText = 'Tap to Start Low-Latency Audio';
-                            return;
+                        if (wantPlaying) { stop(); return; }
+                        wantPlaying = true;
+                        try {
+                            audioCtx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 44100 });
+                        } catch (e) {
+                            audioCtx = new (window.AudioContext || window.webkitAudioContext)(); // e.g. older Safari
                         }
-                        audioCtx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 44100 });
+                        audioCtx.resume();
+                        nextStartTime = 0; packets = 0;
+                        setButton('Stop listening');
+                        setStatus('Connecting…');
                         const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
                         ws = new WebSocket(proto + '//' + location.host + '/ws/$token/http_ws_browser');
                         ws.binaryType = 'arraybuffer';
-                        document.getElementById('playBtn').innerText = 'Disconnect Live Stream';
-
+                        ws.onopen = () => setStatus('Connected. Waiting for audio — start capturing in the Aerocast app.');
+                        ws.onclose = () => { if (wantPlaying) stop('Connection lost. Is the phone still on this Wi-Fi?'); };
+                        ws.onerror = () => {};
                         ws.onmessage = (event) => {
                             const int16 = new Int16Array(event.data);
                             const frames = int16.length / 2;
-                            const audioBuf = audioCtx.createBuffer(2, frames, 44100);
-                            const left = audioBuf.getChannelData(0);
-                            const right = audioBuf.getChannelData(1);
+                            if (!frames || !audioCtx) return;
+                            const buf = audioCtx.createBuffer(2, frames, 44100);
+                            const left = buf.getChannelData(0), right = buf.getChannelData(1);
                             for (let i = 0; i < frames; i++) {
-                                left[i] = int16[i * 2] / 32768.0;
-                                right[i] = int16[i * 2 + 1] / 32768.0;
+                                left[i] = int16[i * 2] / 32768;
+                                right[i] = int16[i * 2 + 1] / 32768;
                             }
                             const src = audioCtx.createBufferSource();
-                            src.buffer = audioBuf;
+                            src.buffer = buf;
                             src.connect(audioCtx.destination);
                             const now = audioCtx.currentTime;
-                            if (nextStartTime < now || nextStartTime - now > 0.08) {
-                                nextStartTime = now + 0.025; // 25ms ultra-low jitter target
+                            if (nextStartTime < now || nextStartTime - now > MAX_BUFFER) {
+                                nextStartTime = now + TARGET_BUFFER;   // (re)start with a safe cushion
                             }
                             src.start(nextStartTime);
-                            nextStartTime += audioBuf.duration;
-                            packetsReceived++;
-                            if (packetsReceived % 25 === 0) {
-                                const latencyMs = Math.round((nextStartTime - now) * 1000);
-                                document.getElementById('statsText').innerText =
-                                    'Streaming • Buffer Latency: ' + latencyMs + ' ms • Packets: ' + packetsReceived;
+                            nextStartTime += buf.duration;
+                            if (++packets % 25 === 0) {
+                                setStatus('Playing • about ' + Math.round((nextStartTime - now) * 1000) + ' ms behind the phone');
                             }
                         };
                     }
