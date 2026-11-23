@@ -84,6 +84,13 @@ fun QrStreamShareSheet(
                 style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.primary
             )
+            Text(
+                text = "Page won't open on the other phone (\"Site can't be reached\")? On newer Android phones, " +
+                    "allow the browser's Nearby devices permission: Settings → Apps → Chrome → Permissions → " +
+                    "Nearby devices. Both devices must be on the same Wi-Fi (not a guest network).",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
             if (!isCapturing) {
                 Text(
                     text = "Audio capture is off. Start capturing on the App Isolation tab so listeners can hear something.",
