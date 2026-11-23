@@ -58,6 +58,8 @@ object AirMusicRuntimeCoordinator {
     private val activeSinkControllers = ConcurrentHashMap<String, SinkController>()
     private var previousConnectionStates = emptyMap<String, Boolean>()
     private var previousReceiverStates = emptyMap<String, ReceiverDeviceState>()
+    // DSP curve is -40 dB * (1 - p/100), so 85 = -6 dB of headroom.
+    private const val DSP_HEADROOM_PERCENT = 85
     private val pendingControlJobs = ConcurrentHashMap<String, Job>()
     private val controlLocks = ConcurrentHashMap<String, Mutex>()
 
@@ -114,8 +116,10 @@ object AirMusicRuntimeCoordinator {
                 val metadata = MediaSessionMetadataListener.metadataFlow.value
                 receivers.forEach { receiver ->
                     // Push EQ / limiter / mono to the native per-speaker DSP whenever they change.
-                    // Volume stays at 100% in the DSP: each speaker's own volume control handles it,
-                    // so the app never attenuates twice.
+                    // The DSP applies a fixed -6 dB of headroom instead of a volume: Android captures
+                    // system audio at full scale, and loud masters sat within 0.3 dB of digital maximum,
+                    // which made speakers that add their own bass/loudness processing distort (heard
+                    // as crackle on AirPlay). Each speaker's own volume control does the rest.
                     val prevDsp = previousReceiverStates[receiver.id]
                     if (prevDsp == null ||
                         prevDsp.eqEnabled != receiver.eqEnabled ||
@@ -125,7 +129,7 @@ object AirMusicRuntimeCoordinator {
                     ) {
                         NativeAudioEngine.nativeConfigureSinkDsp(
                             sinkId = receiver.id,
-                            volumePercent = 100,
+                            volumePercent = DSP_HEADROOM_PERCENT,
                             muted = false,
                             stereoToMono = receiver.stereoToMono,
                             eqEnabled = receiver.eqEnabled,
