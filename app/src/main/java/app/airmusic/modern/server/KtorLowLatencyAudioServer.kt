@@ -290,9 +290,9 @@ class KtorLowLatencyAudioServer(
      */
     fun buildAuthorizedStreamUrl(sinkId: String, preferWav: Boolean = true): String {
         val ip = resolveLocalLanIpv4()
-        val settings = MultiRoomStateRepository.settingsFlow.value
-        val useMp3Fallback = settings.adaptiveBitrateOnLowWifi && isWifiSignalWeak()
-        val ext = if (preferWav && !useMp3Fallback) "Aerocast.wav" else "Aerocast.mp3"
+        // No automatic MP3 fallback on weak Wi-Fi: the bundled MP3 "encoder" only works if
+        // libmp3lame is present (it isn't), otherwise it produces noise.
+        val ext = if (preferWav) "Aerocast.wav" else "Aerocast.mp3"
         return "http://$ip:$listenPort/stream/$sessionToken/$sinkId/$ext"
     }
 

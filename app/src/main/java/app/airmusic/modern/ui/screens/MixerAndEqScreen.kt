@@ -71,23 +71,23 @@ private fun MasterGroupBalanceCard(connectedReceivers: List<ReceiverDeviceState>
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
             Text(
-                text = "Master Multi-Room Mixer (${connectedReceivers.size} Active)",
+                text = "All speakers (${connectedReceivers.size} connected)",
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.Bold
             )
             Text(
-                text = "Proportional group volume & latency envelope across all connected rooms",
+                text = "Change the volume of every connected speaker at once.",
                 style = MaterialTheme.typography.bodySmall
             )
             Spacer(modifier = Modifier.height(8.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 AssistChip(
                     onClick = { MultiRoomStateRepository.setMasterVolumeDelta(-10) },
-                    label = { Text("Group -10%", maxLines = 1) }
+                    label = { Text("All −10%", maxLines = 1) }
                 )
                 AssistChip(
                     onClick = { MultiRoomStateRepository.setMasterVolumeDelta(+10) },
-                    label = { Text("Group +10%", maxLines = 1) }
+                    label = { Text("All +10%", maxLines = 1) }
                 )
             }
         }

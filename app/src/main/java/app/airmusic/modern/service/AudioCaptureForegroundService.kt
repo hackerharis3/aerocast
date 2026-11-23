@@ -145,7 +145,7 @@ class AudioCaptureForegroundService : Service() {
         val notification: Notification = NotificationCompat.Builder(this, AirMusicModernApp.NOTIFICATION_CHANNEL_ID)
             .setSmallIcon(app.airmusic.modern.R.drawable.ic_stat_airmusic)
             .setContentTitle("Casting: ${metadata.title}")
-            .setContentText("${metadata.artist} • 44.1 kHz Stereo (352-frame sync)")
+            .setContentText(metadata.artist.ifBlank { "Streaming to your speakers" })
             .setContentIntent(pendingOpen)
             .setOngoing(true)
             .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)

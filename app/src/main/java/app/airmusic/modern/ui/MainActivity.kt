@@ -301,13 +301,20 @@ fun PerAppCaptureIsolationScreen(
             ) {
                 Column(modifier = Modifier.padding(16.dp)) {
                     Text(
-                        text = if (telemetry.isCapturing) "Live System Capture Active (44.1 kHz Stereo)" else "Capture Engine Idle",
+                        text = if (telemetry.isCapturing) "Capturing phone audio" else "Not capturing",
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold
                     )
                     Spacer(modifier = Modifier.height(4.dp))
                     Text(
-                        text = "352-Sample Frames: ${telemetry.framesCaptured} • Peak Level: ${"%.1f".format(telemetry.latestRmsDb)} dBFS",
+                        text = if (telemetry.isCapturing) {
+                            // 352 samples per frame at 44.1 kHz
+                            val seconds = telemetry.framesCaptured * 352L / 44_100L
+                            val level = if (telemetry.latestRmsDb <= -90f) "silent" else "${"%.0f".format(telemetry.latestRmsDb)} dB"
+                            "Running %d:%02d • Level: %s".format(seconds / 60, seconds % 60, level)
+                        } else {
+                            "Start capturing to send this phone's sound to your speakers."
+                        },
                         style = MaterialTheme.typography.bodyMedium
                     )
                     Spacer(modifier = Modifier.height(12.dp))
@@ -332,7 +339,7 @@ fun PerAppCaptureIsolationScreen(
                             }
                         }
                     ) {
-                        Text(if (telemetry.isCapturing) "Stop Audio Capture" else "Start Internal Audio Capture")
+                        Text(if (telemetry.isCapturing) "Stop capturing" else "Start capturing")
                     }
                 }
             }
@@ -342,9 +349,14 @@ fun PerAppCaptureIsolationScreen(
             Card(modifier = Modifier.fillMaxWidth()) {
                 Column(modifier = Modifier.padding(16.dp)) {
                     Text(
-                        text = "Per-App Audio Isolation (addMatchingUid / excludeUid)",
+                        text = "Choose which apps to stream",
                         style = MaterialTheme.typography.titleSmall,
                         fontWeight = FontWeight.SemiBold
+                    )
+                    Text(
+                        text = "Some apps (calls, many games, apps that block recording) can't be captured by Android.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                     Spacer(modifier = Modifier.height(8.dp))
                     FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -352,7 +364,7 @@ fun PerAppCaptureIsolationScreen(
                             FilterChip(
                                 selected = filterMode == mode,
                                 onClick = { onUpdateUidFilter(mode, selectedUids) },
-                                label = { Text(mode.name.replace('_', ' ')) }
+                                label = { Text(mode.label) }
                             )
                         }
                     }

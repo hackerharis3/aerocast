@@ -206,7 +206,7 @@ fun ExpandableReceiverCard(receiver: ReceiverDeviceState) {
                             shape = MaterialTheme.shapes.small
                         ) {
                             Text(
-                                text = "${receiver.activeCodec.displayName} • ${receiver.delayOffsetMs}ms",
+                                text = receiver.activeCodec.displayName,
                                 style = MaterialTheme.typography.labelSmall,
                                 modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
                             )
@@ -233,7 +233,7 @@ fun ExpandableReceiverCard(receiver: ReceiverDeviceState) {
                     TextButton(
                         onClick = { MultiRoomStateRepository.toggleReceiverExpanded(receiver.id) }
                     ) {
-                        Text(if (receiver.isExpanded) "Hide Controls" else "Mixer & Sync")
+                        Text(if (receiver.isExpanded) "Hide controls" else "Controls")
                     }
                 }
             }
@@ -278,43 +278,19 @@ fun ExpandableReceiverCard(receiver: ReceiverDeviceState) {
 
                     Spacer(modifier = Modifier.height(6.dp))
 
-                    // Multi-Room Sync Delay Offset (-5000 ms to +5000 ms) + Mic Auto-Chirp Calibration
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(
-                            text = "Multi-Room Sync Delay: ${receiver.delayOffsetMs} ms",
-                            style = MaterialTheme.typography.labelLarge
-                        )
-                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                            TextButton(onClick = { MultiRoomStateRepository.setReceiverDelayOffset(receiver.id, 0) }) {
-                                Text("Reset 0ms")
-                            }
-                            OutlinedButton(
-                                onClick = { MultiRoomStateRepository.runAutoChirpCalibration(receiver.id) }
-                            ) {
-                                Text("Auto-Chirp Sync")
-                            }
-                        }
-                    }
-
-                    Slider(
-                        value = receiver.delayOffsetMs.toFloat(),
-                        onValueChange = { MultiRoomStateRepository.setReceiverDelayOffset(receiver.id, it.roundToInt()) },
-                        valueRange = -2000f..2000f
-                    )
+                    // Multi-room sync delay and "Auto-Chirp" are hidden: no sender applies the delay yet,
+                    // and the chirp button only filled in a fixed guess instead of measuring.
 
                     // Per-Speaker Audio Codec Profile & Stereo-to-Mono Downmix
                     Text(
-                        text = "Streaming Codec & Channel Mode",
+                        text = "Audio format",
                         style = MaterialTheme.typography.labelMedium,
                         fontWeight = FontWeight.SemiBold
                     )
                     Spacer(modifier = Modifier.height(4.dp))
                     FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        receiver.protocol.supportedCodecs.forEach { codec ->
+                        // Only show a format choice when there is more than one real option.
+                        if (receiver.protocol.supportedCodecs.size > 1) receiver.protocol.supportedCodecs.forEach { codec ->
                             FilterChip(
                                 selected = receiver.activeCodec == codec,
                                 onClick = { MultiRoomStateRepository.setReceiverCodec(receiver.id, codec) },
@@ -324,7 +300,7 @@ fun ExpandableReceiverCard(receiver: ReceiverDeviceState) {
                         FilterChip(
                             selected = receiver.stereoToMono,
                             onClick = { MultiRoomStateRepository.toggleStereoToMono(receiver.id) },
-                            label = { Text(if (receiver.stereoToMono) "Mono Downmix: ON" else "Stereo 2.0") }
+                            label = { Text(if (receiver.stereoToMono) "Mono" else "Stereo") }
                         )
                     }
                 }
@@ -338,50 +314,49 @@ private fun ManualAirPlayDeviceDialog(
     onDismiss: () -> Unit,
     onConfirm: (name: String, ip: String, port: Int, requiresAuthSetup: Boolean) -> Unit
 ) {
-    var name by remember { mutableStateOf("Bedroom AirPlay Speaker") }
-    var ip by remember { mutableStateOf("192.168.1.120") }
+    var name by remember { mutableStateOf("") }
+    var ip by remember { mutableStateOf("") }
     var portText by remember { mutableStateOf("7000") }
-    var requiresAuthSetup by remember { mutableStateOf(true) }
+    val ipLooksValid = ip.trim().matches(Regex("""\d{1,3}(\.\d{1,3}){3}"""))
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Add Manual AirPlay Receiver") },
+        title = { Text("Add AirPlay speaker") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 OutlinedTextField(
                     value = name,
                     onValueChange = { name = it },
-                    label = { Text("Speaker Alias") },
+                    label = { Text("Name (optional)") },
+                    placeholder = { Text("e.g. Bedroom speaker") },
                     singleLine = true
                 )
                 OutlinedTextField(
                     value = ip,
                     onValueChange = { ip = it },
-                    label = { Text("IPv4 / IPv6 Address") },
+                    label = { Text("IP address") },
+                    placeholder = { Text("e.g. 192.168.1.50") },
+                    isError = ip.isNotBlank() && !ipLooksValid,
                     singleLine = true
                 )
                 OutlinedTextField(
                     value = portText,
                     onValueChange = { portText = it },
-                    label = { Text("RTSP Port (Default 5000 or 7000)") },
+                    label = { Text("Port (usually 7000 or 5000)") },
                     singleLine = true
                 )
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text("AirPlay 2 /auth-setup Handshake")
-                    Switch(checked = requiresAuthSetup, onCheckedChange = { requiresAuthSetup = it })
-                }
             }
         },
         confirmButton = {
-            Button(onClick = {
-                val port = portText.toIntOrNull() ?: 7000
-                onConfirm(name, ip, port, requiresAuthSetup)
-            }) {
-                Text("Add & Connect")
+            Button(
+                enabled = ipLooksValid,
+                onClick = {
+                    val port = portText.toIntOrNull() ?: 7000
+                    // AirPlay 2 /auth-setup isn't implemented, so it is never requested.
+                    onConfirm(name.trim(), ip.trim(), port, false)
+                }
+            ) {
+                Text("Add & connect")
             }
         },
         dismissButton = {

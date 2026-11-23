@@ -7,10 +7,10 @@ enum class CaptureSourceMode {
     MICROPHONE               // 44.1 kHz Stereo AudioRecord fallback
 }
 
-enum class AppUidFilterMode {
-    CAPTURE_ALL_MEDIA,
-    INCLUDE_ONLY_SELECTED_UIDS,
-    EXCLUDE_SELECTED_UIDS
+enum class AppUidFilterMode(val label: String) {
+    CAPTURE_ALL_MEDIA("All apps"),
+    INCLUDE_ONLY_SELECTED_UIDS("Only selected apps"),
+    EXCLUDE_SELECTED_UIDS("All except selected")
 }
 
 data class AudioCaptureSessionConfig(

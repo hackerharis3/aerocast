@@ -1,5 +1,6 @@
 package app.airmusic.modern
 
+import app.airmusic.modern.nativebridge.NativeAudioEngine
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -112,6 +113,29 @@ object AirMusicRuntimeCoordinator {
             MultiRoomStateRepository.receiversFlow.collect { receivers ->
                 val metadata = MediaSessionMetadataListener.metadataFlow.value
                 receivers.forEach { receiver ->
+                    // Push EQ / limiter / mono to the native per-speaker DSP whenever they change.
+                    // Volume stays at 100% in the DSP: each speaker's own volume control handles it,
+                    // so the app never attenuates twice.
+                    val prevDsp = previousReceiverStates[receiver.id]
+                    if (prevDsp == null ||
+                        prevDsp.eqEnabled != receiver.eqEnabled ||
+                        prevDsp.limiterEnabled != receiver.limiterEnabled ||
+                        prevDsp.stereoToMono != receiver.stereoToMono ||
+                        prevDsp.eqBands != receiver.eqBands
+                    ) {
+                        NativeAudioEngine.nativeConfigureSinkDsp(
+                            sinkId = receiver.id,
+                            volumePercent = 100,
+                            muted = false,
+                            stereoToMono = receiver.stereoToMono,
+                            eqEnabled = receiver.eqEnabled,
+                            limiterEnabled = receiver.limiterEnabled
+                        )
+                        receiver.eqBands.forEach { band ->
+                            NativeAudioEngine.nativeSetSinkEqBandGain(receiver.id, band.index, band.gainDb)
+                        }
+                    }
+
                     val wasConnected = previousConnectionStates[receiver.id] ?: false
                     if (receiver.isConnected && !wasConnected) {
                         val controller = buildControllerFor(appContext, receiver)

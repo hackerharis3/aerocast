@@ -9,21 +9,23 @@ enum class AudioCodecProfile(val displayName: String, val bitrateInfo: String) {
     FLAC("FLAC", "Lossless ~700 kbps")
 }
 
+// Only formats the native engine can really produce are listed (ALAC, WAV, raw LPCM).
+// MP3/Opus/FLAC need encoders the app doesn't ship yet.
 enum class SinkProtocol(
     val badgeTitle: String,
     val defaultPort: Int,
     val supportedCodecs: List<AudioCodecProfile>
 ) {
     AIRPLAY("AirPlay", 7000, listOf(AudioCodecProfile.ALAC)),
-    CHROMECAST("Google Cast", 8009, listOf(AudioCodecProfile.WAV, AudioCodecProfile.MP3_320, AudioCodecProfile.OPUS, AudioCodecProfile.FLAC)),
-    SONOS("SONOS", 1400, listOf(AudioCodecProfile.MP3_320, AudioCodecProfile.WAV, AudioCodecProfile.FLAC)),
-    DLNA("DLNA / UPnP", 49152, listOf(AudioCodecProfile.WAV, AudioCodecProfile.LPCM, AudioCodecProfile.MP3_320, AudioCodecProfile.FLAC)),
-    DENON_HEOS("Denon HEOS", 60006, listOf(AudioCodecProfile.WAV, AudioCodecProfile.MP3_320)),
-    FIRE_TV("Amazon Fire TV", 8008, listOf(AudioCodecProfile.WAV, AudioCodecProfile.MP3_320)),
+    CHROMECAST("Google Cast", 8009, listOf(AudioCodecProfile.WAV)),
+    SONOS("SONOS", 1400, listOf(AudioCodecProfile.WAV)),
+    DLNA("DLNA / UPnP", 49152, listOf(AudioCodecProfile.LPCM)),
+    DENON_HEOS("Denon HEOS", 60006, listOf(AudioCodecProfile.WAV)),
+    FIRE_TV("Amazon Fire TV", 8008, listOf(AudioCodecProfile.WAV)),
     ROKU("Roku ECP", 8060, listOf(AudioCodecProfile.WAV)),
-    SAMSUNG_MULTIROOM("Samsung MSF", 8001, listOf(AudioCodecProfile.WAV, AudioCodecProfile.MP3_320)),
-    SNAPCAST("Snapcast", 1704, listOf(AudioCodecProfile.WAV, AudioCodecProfile.FLAC, AudioCodecProfile.OPUS)),
-    HTTP_WEBSOCKET("Browser / WebSocket", 8080, listOf(AudioCodecProfile.OPUS, AudioCodecProfile.MP3_320, AudioCodecProfile.WAV)),
+    SAMSUNG_MULTIROOM("Samsung MSF", 8001, listOf(AudioCodecProfile.WAV)),
+    SNAPCAST("Snapcast", 1704, listOf(AudioCodecProfile.LPCM)),
+    HTTP_WEBSOCKET("Browser / WebSocket", 8080, listOf(AudioCodecProfile.LPCM)),
     FILE_MP3_RECORDER("SAF Recorder", 0, listOf(AudioCodecProfile.MP3_320, AudioCodecProfile.FLAC))
 }
 
