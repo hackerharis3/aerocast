@@ -1,5 +1,7 @@
 package app.airmusic.modern.server
 
+import io.ktor.server.response.respondRedirect
+import io.ktor.server.routing.IgnoreTrailingSlash
 import android.content.Context
 import android.graphics.Bitmap
 import android.net.wifi.WifiManager
@@ -58,12 +60,21 @@ class KtorLowLatencyAudioServer(
 
         server = embeddedServer(CIO, port = listenPort, host = "0.0.0.0") {
             install(WebSockets)
+            // Phones often add a trailing "/" to typed addresses; treat /listen/x/ like /listen/x.
+            install(IgnoreTrailingSlash)
 
             routing {
                 // 1. Sub-50ms HTML5 Web Audio API + WebSocket Live Player Page (QR Share Target)
                 get("/listen/{token}") {
                     if (!call.isAuthorizedToken(sessionToken)) {
-                        call.respondText("Unauthorized stream token", status = HttpStatusCode.Forbidden)
+                        call.respondText(
+                            buildInfoPageHtml(
+                                "This link is out of date",
+                                "The listening link changes each time Aerocast restarts. On the phone, open Aerocast → Receivers → Listen in browser and scan the new code."
+                            ),
+                            ContentType.Text.Html,
+                            HttpStatusCode.Forbidden
+                        )
                         return@get
                     }
                     val meta = MediaSessionMetadataListener.metadataFlow.value
@@ -260,6 +271,24 @@ class KtorLowLatencyAudioServer(
                     }
                 }
 
+                // Friendly handling for mistyped addresses: auto-capitalised "/Listen/..." is redirected,
+                // anything else shows a short "Aerocast is running" page instead of a bare 404.
+                get("{path...}") {
+                    val path = call.request.local.uri.substringBefore('?')
+                    if (path.lowercase().startsWith("/listen/") && !path.startsWith("/listen/")) {
+                        call.respondRedirect("/listen/" + path.substring("/listen/".length).lowercase().trimEnd('/'))
+                        return@get
+                    }
+                    call.respondText(
+                        buildInfoPageHtml(
+                            "Aerocast is running",
+                            "To listen here, open the full link shown in the Aerocast app under Receivers → Listen in browser."
+                        ),
+                        ContentType.Text.Html,
+                        HttpStatusCode.NotFound
+                    )
+                }
+
                 // 5. Live Album Artwork Endpoint (/stream/{token}/current.png) for Chromecast & DLNA DIDL-Lite
                 get("/stream/{token}/current.png") {
                     if (!call.isAuthorizedToken(sessionToken)) {
@@ -375,6 +404,16 @@ class KtorLowLatencyAudioServer(
             }
             return "127.0.0.1"
         }
+
+        private fun buildInfoPageHtml(heading: String, body: String): String = """
+            <!DOCTYPE html><html lang="en"><head><meta charset="UTF-8" />
+            <meta name="viewport" content="width=device-width, initial-scale=1.0" /><title>Aerocast</title>
+            <style>body{font-family:system-ui,sans-serif;background:#121212;color:#fff;display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0;padding:16px;box-sizing:border-box}
+            .card{background:#1E1E1E;padding:28px;border-radius:20px;max-width:420px;width:100%;text-align:center}
+            .brand{font-size:13px;font-weight:700;letter-spacing:.08em;color:#FF7043;text-transform:uppercase;margin-bottom:12px}
+            p{color:#AAAAAA}</style></head>
+            <body><div class="card"><div class="brand">Aerocast</div><h2>${htmlEscape(heading)}</h2><p>${htmlEscape(body)}</p></div></body></html>
+        """.trimIndent()
 
         private fun htmlEscape(s: String): String = s
             .replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
