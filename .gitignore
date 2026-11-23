@@ -17,3 +17,4 @@ local.properties
 # Local test artifacts
 /build_log.txt
 /*.png
+/build_release_log.txt
