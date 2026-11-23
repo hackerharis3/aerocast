@@ -32,14 +32,14 @@ import javax.net.ssl.X509TrustManager
  * 1. Remediates SEC-05 (DummyTrustManager): Validates that the Chromecast peer X.509 certificate
  *    is currently valid, possesses an RSA/ECDSA public key >= 2048/256 bits, and matches Cast ICA/device
  *    distinguished name constraints.
- * 2. Supports both AirMusic's Custom Low-Latency Receiver App ID ("2F84DCF6") with live metadata
- *    pushes on namespace "urn:x-cast:app.airmusic", and fallback Default Media Receiver ("CC1AD845").
+ * 2. Plays through Google's Default Media Receiver ("CC1AD845"), which every Cast device ships with.
+ *    Track info is sent once in the LOAD request (music-track metadata). A custom receiver with live
+ *    metadata updates would need its own registered App ID in the Google Cast SDK Developer Console.
  */
 class ChromecastTlsSinkController(
     override val receiverId: String,
     private val scope: CoroutineScope,
-    private val ktorServer: KtorLowLatencyAudioServer,
-    private val useCompatibilityReceiver: Boolean = false
+    private val ktorServer: KtorLowLatencyAudioServer
 ) : SinkController {
 
     private var sslSocket: SSLSocket? = null
@@ -85,8 +85,8 @@ class ChromecastTlsSinkController(
             startReaderLoop(input, receiver, metadata)
             startHeartbeatLoop(output)
 
-            // 3. Launch Target Cast Receiver App (2F84DCF6 primary or CC1AD845 compatibility)
-            val appId = if (useCompatibilityReceiver) APP_ID_DEFAULT_MEDIA_RECEIVER else APP_ID_AIRMUSIC_CUSTOM
+            // 3. Launch Google's Default Media Receiver
+            val appId = APP_ID_DEFAULT_MEDIA_RECEIVER
             val launchReqId = requestIdCounter.getAndIncrement()
             CastV2ProtobufCodec.writeMessage(
                 output,
@@ -234,29 +234,8 @@ class ChromecastTlsSinkController(
     }
 
     override suspend fun updateMetadata(receiver: ReceiverDeviceState, metadata: MediaMetadataState) {
-        val output = outputStream ?: return
-        val transportId = activeTransportId ?: return
-        withContext(Dispatchers.IO) {
-            try {
-                val lanIp = KtorLowLatencyAudioServer.resolveLocalLanIpv4()
-                val imageUrl = "http://$lanIp:8080/stream/${ktorServer.sessionToken}/current.png?${System.currentTimeMillis()}"
-                val payload = JSONObject().apply {
-                    put("title", metadata.title)
-                    put("artist", metadata.artist)
-                    put("imageUrl", imageUrl)
-                }.toString()
-
-                CastV2ProtobufCodec.writeMessage(
-                    output,
-                    CastChannelMessage(
-                        destinationId = transportId,
-                        namespace = NS_AIRMUSIC_CUSTOM,
-                        payloadUtf8 = payload
-                    )
-                )
-            } catch (_: Throwable) {
-            }
-        }
+        // The Default Media Receiver has no channel for live metadata pushes on a running LIVE stream
+        // (re-sending LOAD would interrupt audio), so track info is only sent with the initial LOAD.
     }
 
     override suspend fun setVolume(receiver: ReceiverDeviceState, volumePercent: Int) {
@@ -352,9 +331,6 @@ class ChromecastTlsSinkController(
         private const val NS_HEARTBEAT = "urn:x-cast:com.google.cast.tp.heartbeat"
         private const val NS_RECEIVER = "urn:x-cast:com.google.cast.receiver"
         private const val NS_MEDIA = "urn:x-cast:com.google.cast.media"
-        private const val NS_AIRMUSIC_CUSTOM = "urn:x-cast:app.airmusic"
-
-        private const val APP_ID_AIRMUSIC_CUSTOM = "2F84DCF6"
         private const val APP_ID_DEFAULT_MEDIA_RECEIVER = "CC1AD845"
     }
 }

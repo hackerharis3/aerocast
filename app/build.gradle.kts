@@ -13,8 +13,8 @@ android {
         applicationId = "app.airmusic.modern"
         minSdk = 30 // Android 11 (R) baseline
         targetSdk = 35 // Android 15 (VanillaIceCream)
-        versionCode = 7
-        versionName = "2.1.0-modern-cleanroom"
+        versionCode = 1
+        versionName = "1.0.0"
 
         externalNativeBuild {
             cmake {

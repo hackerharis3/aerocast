@@ -31,7 +31,6 @@
             <action android:name="android.intent.action.MAIN" />
             <category android:name="android.intent.category.LAUNCHER" />
         </intent>
-        <package android:name="app.airmusic.amrscservice" />
     </queries>
 
     <!-- Remediates SEC-06: allowBackup="false" and explicit dataExtractionRules -->
