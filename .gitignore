@@ -1,0 +1,19 @@
+# Gradle / Kotlin build output
+.gradle/
+.kotlin/
+build/
+app/build/
+app/.cxx/
+.externalNativeBuild/
+
+# Machine-specific settings (SDK path)
+local.properties
+
+# IDE
+.idea/
+*.iml
+.DS_Store
+
+# Local test artifacts
+/build_log.txt
+/*.png
