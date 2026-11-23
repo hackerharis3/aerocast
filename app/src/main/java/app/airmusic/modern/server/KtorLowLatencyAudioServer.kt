@@ -1,5 +1,6 @@
 package app.airmusic.modern.server
 
+import app.airmusic.modern.audio.AacEncoder
 import io.ktor.server.response.respondRedirect
 import io.ktor.server.routing.IgnoreTrailingSlash
 import android.content.Context
@@ -143,7 +144,7 @@ class KtorLowLatencyAudioServer(
                             val n = NativeAudioEngine.nativeReadProcessedSinkPacket(
                                 sinkId = sinkId,
                                 sequenceNumber = seq,
-                                effectiveDelayMs = 0,
+                                effectiveDelayMs = MultiRoomStateRepository.syncDelayMs(sinkId),
                                 codecMode = NativeAudioEngine.CODEC_MODE_RAW_PCM,
                                 outBuffer = pcmBuf
                             )
@@ -176,7 +177,7 @@ class KtorLowLatencyAudioServer(
                             val n = NativeAudioEngine.nativeReadProcessedSinkPacket(
                                 sinkId = sinkId,
                                 sequenceNumber = seq,
-                                effectiveDelayMs = 0,
+                                effectiveDelayMs = MultiRoomStateRepository.syncDelayMs(sinkId),
                                 codecMode = NativeAudioEngine.CODEC_MODE_RAW_PCM,
                                 outBuffer = pcmBuf
                             )
@@ -205,6 +206,65 @@ class KtorLowLatencyAudioServer(
                     call.response.header("TransferMode.DLNA.ORG", "Streaming")
                     call.response.header("ContentFeatures.DLNA.ORG", LPCM_CONTENT_FEATURES)
                     call.respond(StreamHeadResponse(ContentType.parse("audio/L16;rate=44100;channels=2")))
+                }
+
+                // 3c. Endless AAC (ADTS) stream, encoded on the phone with Android's built-in AAC encoder.
+                // ~256 kbps instead of ~1.4 Mbps for LPCM: useful on weak Wi-Fi.
+                get("/stream/{token}/{sinkId}/Aerocast.aac") {
+                    val sinkId = call.parameters["sinkId"] ?: "default"
+                    if (!call.isAuthorizedRequest(sessionToken, sinkId)) {
+                        call.respondText("Forbidden", status = HttpStatusCode.Forbidden)
+                        return@get
+                    }
+                    call.response.header("TransferMode.DLNA.ORG", "Streaming")
+                    call.response.header("ContentFeatures.DLNA.ORG", AAC_CONTENT_FEATURES)
+                    call.response.header("Cache-Control", "no-cache, no-store")
+
+                    call.respondBytesWriter(contentType = ContentType.parse(AAC_MIME)) {
+                        val pending = ArrayList<ByteArray>()
+                        val encoder = AacEncoder(onFrame = { data, info ->
+                            val frame = ByteArray(7 + info.size)
+                            System.arraycopy(AacEncoder.adtsHeader(info.size), 0, frame, 0, 7)
+                            data.get(frame, 7, info.size)
+                            pending.add(frame)
+                        })
+                        try {
+                            var seq = NativeAudioEngine.nativeGetWriteSequence()
+                            val pcmBuf = ByteArray(NativeAudioEngine.FRAME_SIZE_BYTES)
+                            while (true) {
+                                val n = NativeAudioEngine.nativeReadProcessedSinkPacket(
+                                    sinkId = sinkId,
+                                    sequenceNumber = seq,
+                                    effectiveDelayMs = MultiRoomStateRepository.syncDelayMs(sinkId),
+                                    codecMode = NativeAudioEngine.CODEC_MODE_RAW_PCM,
+                                    outBuffer = pcmBuf
+                                )
+                                if (n > 0) {
+                                    encoder.encode(pcmBuf, n)
+                                    seq++
+                                    if (pending.isNotEmpty()) {
+                                        pending.forEach { writeFully(it, 0, it.size) }
+                                        pending.clear()
+                                        flush()
+                                    }
+                                } else {
+                                    delay(4)
+                                }
+                            }
+                        } finally {
+                            encoder.release()
+                        }
+                    }
+                }
+                head("/stream/{token}/{sinkId}/Aerocast.aac") {
+                    val sinkId = call.parameters["sinkId"] ?: "default"
+                    if (!call.isAuthorizedRequest(sessionToken, sinkId)) {
+                        call.respond(HttpStatusCode.Forbidden)
+                        return@head
+                    }
+                    call.response.header("TransferMode.DLNA.ORG", "Streaming")
+                    call.response.header("ContentFeatures.DLNA.ORG", AAC_CONTENT_FEATURES)
+                    call.respond(StreamHeadResponse(ContentType.parse(AAC_MIME)))
                 }
 
                 // DLNA renderers probe the stream with HEAD before GET; answer with headers only.
@@ -251,7 +311,7 @@ class KtorLowLatencyAudioServer(
                             val n = NativeAudioEngine.nativeReadProcessedSinkPacket(
                                 sinkId = sinkId,
                                 sequenceNumber = seq,
-                                effectiveDelayMs = 0,
+                                effectiveDelayMs = MultiRoomStateRepository.syncDelayMs(sinkId),
                                 codecMode = NativeAudioEngine.CODEC_MODE_MP3_320,
                                 outBuffer = mp3Buf
                             )
@@ -325,6 +385,12 @@ class KtorLowLatencyAudioServer(
         return "http://$ip:$listenPort/stream/$sessionToken/$sinkId/$ext"
     }
 
+    /** AAC (ADTS) stream URL for DLNA renderers on weak Wi-Fi. */
+    fun buildAuthorizedAacStreamUrl(sinkId: String): String {
+        val ip = resolveLocalLanIpv4()
+        return "http://$ip:$listenPort/stream/$sessionToken/$sinkId/Aerocast.aac"
+    }
+
     /** Raw big-endian LPCM stream URL (audio/L16) for DLNA renderers. */
     fun buildAuthorizedLpcmStreamUrl(sinkId: String): String {
         val ip = resolveLocalLanIpv4()
@@ -365,6 +431,9 @@ class KtorLowLatencyAudioServer(
     }
 
     companion object {
+        const val AAC_MIME = "audio/vnd.dlna.adts"
+        const val AAC_CONTENT_FEATURES =
+            "DLNA.ORG_PN=AAC_ADTS;DLNA.ORG_OP=00;DLNA.ORG_CI=0;DLNA.ORG_FLAGS=01700000000000000000000000000000"
         const val LPCM_MIME = "audio/L16;rate=44100;channels=2"
         const val LPCM_CONTENT_FEATURES =
             "DLNA.ORG_PN=LPCM;DLNA.ORG_OP=00;DLNA.ORG_CI=0;DLNA.ORG_FLAGS=01700000000000000000000000000000"

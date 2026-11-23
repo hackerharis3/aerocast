@@ -1,5 +1,11 @@
 package app.airmusic.modern.ui.screens
 
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.clickable
+import androidx.compose.material3.Checkbox
+import androidx.compose.material3.IconButton
+import androidx.compose.material.icons.outlined.Edit
 import app.airmusic.modern.AirMusicRuntimeCoordinator
 import app.airmusic.modern.service.AudioCaptureForegroundService
 import app.airmusic.modern.ui.components.QrStreamShareSheet
@@ -70,6 +76,8 @@ fun ReceiversGridScreen(
 ) {
     var showAddManualAirPlayDialog by remember { mutableStateOf(false) }
     var showListenSheet by remember { mutableStateOf(false) }
+    // null = closed; GROUP_NEW = creating; otherwise the group being edited
+    var editingGroup by remember { mutableStateOf<QuickConnectGroup?>(null) }
     val telemetry by AudioCaptureForegroundService.telemetryFlow.collectAsState()
 
     LazyVerticalGrid(
@@ -86,7 +94,9 @@ fun ReceiversGridScreen(
                 onSelectGroup = { MultiRoomStateRepository.activateQuickConnectGroup(it) },
                 onDisconnectAll = { MultiRoomStateRepository.disconnectAllReceivers() },
                 onAddManualAirPlay = { showAddManualAirPlayDialog = true },
-                onListenInBrowser = { showListenSheet = true }
+                onListenInBrowser = { showListenSheet = true },
+                onNewGroup = { editingGroup = GROUP_NEW },
+                onEditGroup = { editingGroup = it }
             )
         }
 
@@ -106,6 +116,22 @@ fun ReceiversGridScreen(
         items(items = receivers, key = { it.id }) { receiver ->
             ExpandableReceiverCard(receiver = receiver)
         }
+    }
+
+    editingGroup?.let { group ->
+        GroupEditorDialog(
+            group = group.takeIf { it !== GROUP_NEW },
+            receivers = receivers,
+            onDismiss = { editingGroup = null },
+            onSave = { name, ids ->
+                MultiRoomStateRepository.saveGroup(group.takeIf { it !== GROUP_NEW }?.id, name, ids)
+                editingGroup = null
+            },
+            onDelete = {
+                MultiRoomStateRepository.deleteGroup(group.id)
+                editingGroup = null
+            }
+        )
     }
 
     if (showListenSheet) {
@@ -134,7 +160,9 @@ private fun QuickConnectGroupsBanner(
     onSelectGroup: (QuickConnectGroup) -> Unit,
     onDisconnectAll: () -> Unit,
     onAddManualAirPlay: () -> Unit,
-    onListenInBrowser: () -> Unit
+    onListenInBrowser: () -> Unit,
+    onNewGroup: () -> Unit,
+    onEditGroup: (QuickConnectGroup) -> Unit
 ) {
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -150,6 +178,9 @@ private fun QuickConnectGroupsBanner(
                 modifier = Modifier.horizontalScroll(rememberScrollState()),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
+                TextButton(onClick = onNewGroup) {
+                    Text("+ New group", maxLines = 1)
+                }
                 TextButton(onClick = onAddManualAirPlay) {
                     Text("+ Manual AirPlay", maxLines = 1)
                 }
@@ -166,7 +197,7 @@ private fun QuickConnectGroupsBanner(
             }
             if (groups.isEmpty()) {
                 Text(
-                    text = "No speaker groups yet.",
+                    text = "No speaker groups yet. Tap + New group to play several speakers with one tap.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -180,11 +211,16 @@ private fun QuickConnectGroupsBanner(
                 groups.forEach { group ->
                     val isGroupActive = group.receiverIds.isNotEmpty() &&
                         activeReceiverIds.containsAll(group.receiverIds)
-                    ElevatedFilterChip(
-                        selected = isGroupActive,
-                        onClick = { onSelectGroup(group) },
-                        label = { Text("${group.name} (${group.receiverIds.size})") }
-                    )
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        ElevatedFilterChip(
+                            selected = isGroupActive,
+                            onClick = { onSelectGroup(group) },
+                            label = { Text("${group.name} (${group.receiverIds.size})") }
+                        )
+                        IconButton(onClick = { onEditGroup(group) }, modifier = Modifier.size(36.dp)) {
+                            Icon(Icons.Outlined.Edit, contentDescription = "Edit ${group.name}", modifier = Modifier.size(18.dp))
+                        }
+                    }
                 }
             }
         }
@@ -303,8 +339,34 @@ fun ExpandableReceiverCard(receiver: ReceiverDeviceState) {
 
                     Spacer(modifier = Modifier.height(6.dp))
 
-                    // Multi-room sync delay and "Auto-Chirp" are hidden: no sender applies the delay yet,
-                    // and the chirp button only filled in a fixed guess instead of measuring.
+                    // Multi-room sync: hold this speaker back so it lines up with slower ones.
+                    // ("Auto-Chirp" mic calibration stays hidden until it really measures.)
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "Sync delay: ${receiver.delayOffsetMs} ms",
+                            style = MaterialTheme.typography.labelLarge
+                        )
+                        if (receiver.delayOffsetMs != 0) {
+                            TextButton(onClick = { MultiRoomStateRepository.setReceiverDelayOffset(receiver.id, 0) }) {
+                                Text("Reset")
+                            }
+                        }
+                    }
+                    Slider(
+                        value = receiver.delayOffsetMs.toFloat(),
+                        onValueChange = { MultiRoomStateRepository.setReceiverDelayOffset(receiver.id, it.roundToInt()) },
+                        valueRange = 0f..MultiRoomStateRepository.MAX_SYNC_DELAY_MS.toFloat()
+                    )
+                    Text(
+                        text = "Playing on several speakers and one is ahead? Add delay to that one until they line up.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
 
                     // Per-Speaker Audio Codec Profile & Stereo-to-Mono Downmix
                     Text(
@@ -387,6 +449,84 @@ private fun ManualAirPlayDeviceDialog(
         dismissButton = {
             TextButton(onClick = onDismiss) {
                 Text("Cancel")
+            }
+        }
+    )
+}
+
+/** Marker for "create a new group" in the editor state. */
+private val GROUP_NEW = QuickConnectGroup(id = "", name = "", receiverIds = emptySet())
+
+@Composable
+private fun GroupEditorDialog(
+    group: QuickConnectGroup?,
+    receivers: List<ReceiverDeviceState>,
+    onDismiss: () -> Unit,
+    onSave: (name: String, receiverIds: Set<String>) -> Unit,
+    onDelete: () -> Unit
+) {
+    var name by remember { mutableStateOf(group?.name ?: "") }
+    // Keeps members that aren't currently discovered, so editing never drops them silently.
+    var selected by remember { mutableStateOf(group?.receiverIds ?: emptySet()) }
+    val missing = selected.count { id -> receivers.none { it.id == id } }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(if (group == null) "New speaker group" else "Edit group") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedTextField(
+                    value = name,
+                    onValueChange = { name = it },
+                    label = { Text("Group name") },
+                    placeholder = { Text("e.g. Living room + kitchen") },
+                    singleLine = true
+                )
+                if (receivers.isEmpty()) {
+                    Text(
+                        "No speakers found yet. Groups can include any speaker Aerocast has found.",
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                }
+                Column(modifier = Modifier.heightIn(max = 280.dp).verticalScroll(rememberScrollState())) {
+                    receivers.forEach { r ->
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { selected = if (r.id in selected) selected - r.id else selected + r.id },
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Checkbox(checked = r.id in selected, onCheckedChange = null)
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Column {
+                                Text(r.displayTitle, style = MaterialTheme.typography.bodyMedium)
+                                Text(
+                                    r.protocol.badgeTitle,
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+                    }
+                }
+                if (missing > 0) {
+                    Text(
+                        "$missing speaker(s) in this group are not on the network right now.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            Button(enabled = selected.isNotEmpty(), onClick = { onSave(name, selected) }) { Text("Save") }
+        },
+        dismissButton = {
+            Row {
+                if (group != null) {
+                    TextButton(onClick = onDelete) { Text("Delete", color = MaterialTheme.colorScheme.error) }
+                }
+                TextButton(onClick = onDismiss) { Text("Cancel") }
             }
         }
     )

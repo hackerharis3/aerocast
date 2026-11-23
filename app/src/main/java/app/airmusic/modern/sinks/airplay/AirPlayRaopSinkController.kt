@@ -1,5 +1,6 @@
 package app.airmusic.modern.sinks.airplay
 
+import app.airmusic.modern.state.MultiRoomStateRepository
 import android.util.Log
 import android.graphics.Bitmap
 import android.util.LruCache
@@ -290,7 +291,8 @@ class AirPlayRaopSinkController(
                 .put(if (first) 0x90.toByte() else 0x80.toByte())
                 .put(0xD4.toByte())
                 .putShort(7)
-                .putInt(((rtpTimestamp - LATENCY_FRAMES) and 0xFFFFFFFFL).toInt())
+                .putInt(((rtpTimestamp - LATENCY_FRAMES -
+                    MultiRoomStateRepository.syncDelayMs(receiverId) * SAMPLE_RATE / 1000L) and 0xFFFFFFFFL).toInt())
                 .putInt(ntpSec)
                 .putInt(ntpFrac)
                 .putInt((rtpTimestamp and 0xFFFFFFFFL).toInt())

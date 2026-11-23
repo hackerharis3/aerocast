@@ -1,5 +1,9 @@
 package app.airmusic.modern.ui
 
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.runtime.LaunchedEffect
+import app.airmusic.modern.audio.AudioFileRecorder
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Apps
@@ -341,6 +345,8 @@ fun PerAppCaptureIsolationScreen(
                     ) {
                         Text(if (telemetry.isCapturing) "Stop capturing" else "Start capturing")
                     }
+                    Spacer(modifier = Modifier.height(8.dp))
+                    RecorderControls(isCapturing = telemetry.isCapturing)
                 }
             }
         }
@@ -437,6 +443,50 @@ fun NowCastingWaveformBar(
                     )
                 }
             }
+        }
+    }
+}
+
+/** Record the captured audio to an .m4a file in a folder the user picks (once). */
+@Composable
+private fun RecorderControls(isCapturing: Boolean) {
+    val context = LocalContext.current
+    val rec by AudioFileRecorder.state.collectAsState()
+    val folderPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
+        if (uri != null) {
+            AudioFileRecorder.saveFolder(context, uri)
+            AudioFileRecorder.start(context, uri)
+        }
+    }
+
+    // Recording only makes sense while capturing; stop it if capture stops.
+    LaunchedEffect(isCapturing) { if (!isCapturing) AudioFileRecorder.stop() }
+
+    if (rec.isRecording) {
+        Text(
+            text = "Recording %d:%02d • %s".format(rec.seconds / 60, rec.seconds % 60, rec.fileName),
+            style = MaterialTheme.typography.bodySmall
+        )
+        OutlinedButton(onClick = { AudioFileRecorder.stop() }) { Text("Stop recording") }
+    } else {
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+            OutlinedButton(
+                enabled = isCapturing,
+                onClick = {
+                    val folder = AudioFileRecorder.savedFolder(context)
+                    if (folder != null) AudioFileRecorder.start(context, folder) else folderPicker.launch(null)
+                }
+            ) { Text("Record to file") }
+            if (AudioFileRecorder.savedFolder(context) != null) {
+                TextButton(onClick = { folderPicker.launch(null) }) { Text("Change folder") }
+            }
+        }
+        rec.error?.let {
+            Text("Recording stopped: $it", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+        }
+        if (!isCapturing) {
+            Text("Start capturing to record.", style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
 }

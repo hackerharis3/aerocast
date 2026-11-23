@@ -165,8 +165,8 @@ open class DlnaSoapSinkController(
 
     protected open fun resolveStreamUrl(receiver: ReceiverDeviceState): String {
         // LPCM (audio/L16) is the one format every DLNA audio renderer must accept; WAV often isn't.
-        if (receiver.activeCodec == AudioCodecProfile.MP3_320) {
-            return ktorServer.buildAuthorizedStreamUrl(receiver.id, preferWav = false)
+        if (receiver.activeCodec == AudioCodecProfile.AAC) {
+            return ktorServer.buildAuthorizedAacStreamUrl(receiver.id)
         }
         return ktorServer.buildAuthorizedLpcmStreamUrl(receiver.id)
     }
@@ -177,6 +177,8 @@ open class DlnaSoapSinkController(
         streamUrl: String
     ): String {
         val protocolInfo = when {
+            streamUrl.endsWith(".aac", ignoreCase = true) ->
+                "http-get:*:${KtorLowLatencyAudioServer.AAC_MIME}:${KtorLowLatencyAudioServer.AAC_CONTENT_FEATURES}"
             streamUrl.endsWith(".l16", ignoreCase = true) ->
                 "http-get:*:${KtorLowLatencyAudioServer.LPCM_MIME}:${KtorLowLatencyAudioServer.LPCM_CONTENT_FEATURES}"
             streamUrl.endsWith(".wav", ignoreCase = true) ->

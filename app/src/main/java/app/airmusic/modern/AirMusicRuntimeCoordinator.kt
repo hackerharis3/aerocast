@@ -17,7 +17,6 @@ import app.airmusic.modern.service.MediaSessionMetadataListener
 import app.airmusic.modern.sinks.DenonHeosSinkController
 import app.airmusic.modern.sinks.DlnaSoapSinkController
 import app.airmusic.modern.sinks.RokuEcpSinkController
-import app.airmusic.modern.sinks.SafMp3RecorderSinkController
 import app.airmusic.modern.sinks.SinkController
 import app.airmusic.modern.sinks.SnapcastTcpServerSinkController
 import app.airmusic.modern.sinks.SonosZoneGroupSinkController
@@ -85,6 +84,7 @@ object AirMusicRuntimeCoordinator {
 
     fun initialize(context: Context) {
         val appContext = context.applicationContext
+        MultiRoomStateRepository.initGroups(appContext)
         encryptedDataStore = KeystoreEncryptedDataStore(appContext)
         ktorServer = KtorLowLatencyAudioServer(appContext, listenPort = 8080)
         nsdDiscovery = Android11NsdDiscoveryManager(appContext, appScope)
@@ -154,6 +154,20 @@ object AirMusicRuntimeCoordinator {
                         activeSinkControllers.remove(receiver.id)?.let { ctrl ->
                             launch(Dispatchers.IO) { ctrl.disconnect(receiver) }
                         }
+                    } else if (receiver.isConnected &&
+                        previousReceiverStates[receiver.id]?.let { it.activeCodec != receiver.activeCodec } == true
+                    ) {
+                        // Audio format changed while playing: reconnect so the speaker switches stream.
+                        val old = activeSinkControllers.remove(receiver.id)
+                        val controller = buildControllerFor(appContext, receiver)
+                        activeSinkControllers[receiver.id] = controller
+                        launch(Dispatchers.IO) {
+                            old?.let { runCatching { it.disconnect(receiver) } }
+                            val ok = runCatching { controller.connect(receiver, metadata) }
+                            android.util.Log.i("AirMusicCoordinator", "reconnect ${receiver.protocol} ${receiver.name} as ${receiver.activeCodec} -> $ok")
+                            if (ok.getOrNull() == true) pushVolumeAndMute(receiver.id, controller)
+                        }
+                        launch(Dispatchers.IO) { encryptedDataStore.saveReceiverProfile(receiver) }
                     } else if (receiver.isConnected) {
                         // Only push volume/mute when they actually changed, and drop any update still
                         // queued for this speaker so slider drags send just the latest value.
@@ -194,12 +208,6 @@ object AirMusicRuntimeCoordinator {
             SinkProtocol.SONOS -> SonosZoneGroupSinkController(receiver.id, ktorServer)
             SinkProtocol.DENON_HEOS -> DenonHeosSinkController(receiver.id, ktorServer)
             SinkProtocol.ROKU -> RokuEcpSinkController(receiver.id, ktorServer)
-            SinkProtocol.FILE_MP3_RECORDER -> SafMp3RecorderSinkController(
-                receiverId = receiver.id,
-                context = context,
-                scope = appScope,
-                treeUriProvider = { persistedSafRecordingTreeUri }
-            )
             SinkProtocol.SNAPCAST -> snapcastServer
             else -> DlnaSoapSinkController(receiver.id, ktorServer)
         }

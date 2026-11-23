@@ -4,13 +4,14 @@ enum class AudioCodecProfile(val displayName: String, val bitrateInfo: String) {
     ALAC("ALAC", "Lossless 16-bit 44.1kHz (352f)"),
     WAV("WAV", "Uncompressed PCM 1411 kbps"),
     LPCM("LPCM", "Raw Stereo 16-bit 1411 kbps"),
+    AAC("AAC", "Compressed 256 kbps (for weak Wi-Fi)"),
     MP3_320("MP3 320k", "LAME CBR 320 kbps"),
     OPUS("Opus", "Ultra-Low Latency 192 kbps"),
     FLAC("FLAC", "Lossless ~700 kbps")
 }
 
-// Only formats the native engine can really produce are listed (ALAC, WAV, raw LPCM).
-// MP3/Opus/FLAC need encoders the app doesn't ship yet.
+// Only formats the app can really produce are listed: ALAC, WAV, raw LPCM (native engine) and
+// AAC (Android's built-in encoder). MP3/Opus/FLAC need encoders the app doesn't ship.
 enum class SinkProtocol(
     val badgeTitle: String,
     val defaultPort: Int,
@@ -19,7 +20,7 @@ enum class SinkProtocol(
     AIRPLAY("AirPlay", 7000, listOf(AudioCodecProfile.ALAC)),
     CHROMECAST("Google Cast", 8009, listOf(AudioCodecProfile.WAV)),
     SONOS("SONOS", 1400, listOf(AudioCodecProfile.WAV)),
-    DLNA("DLNA / UPnP", 49152, listOf(AudioCodecProfile.LPCM)),
+    DLNA("DLNA / UPnP", 49152, listOf(AudioCodecProfile.LPCM, AudioCodecProfile.AAC)),
     DENON_HEOS("Denon HEOS", 60006, listOf(AudioCodecProfile.WAV)),
     FIRE_TV("Amazon Fire TV", 8008, listOf(AudioCodecProfile.WAV)),
     ROKU("Roku ECP", 8060, listOf(AudioCodecProfile.WAV)),

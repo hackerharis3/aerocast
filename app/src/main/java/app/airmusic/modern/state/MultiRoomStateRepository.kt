@@ -1,5 +1,9 @@
 package app.airmusic.modern.state
 
+import android.content.Context
+import android.content.SharedPreferences
+import org.json.JSONArray
+import org.json.JSONObject
 import android.media.audiofx.DynamicsProcessing
 import app.airmusic.modern.model.AudioCodecProfile
 import app.airmusic.modern.model.EqPreset
@@ -72,9 +76,15 @@ object MultiRoomStateRepository {
         }
     }
 
+    const val MAX_SYNC_DELAY_MS = 2000
+
+    /** Current sync delay for a speaker (0 if unknown, e.g. browser listeners). */
+    fun syncDelayMs(receiverId: String): Int =
+        receiversFlow.value.find { it.id == receiverId }?.delayOffsetMs?.coerceIn(0, MAX_SYNC_DELAY_MS) ?: 0
+
     fun setReceiverDelayOffset(receiverId: String, delayMs: Int) {
-        // Snap to 10 ms increments (-5000 ms .. +5000 ms) matching AirMusic p1.a ring buffer
-        val snapped = ((delayMs.coerceIn(-5000, 5000)) / 10) * 10
+        // Positive delay only (a speaker can be held back, not played before capture), 10 ms steps.
+        val snapped = (delayMs.coerceIn(0, MAX_SYNC_DELAY_MS) / 10) * 10
         _receiversFlow.update { list ->
             list.map { r -> if (r.id == receiverId) r.copy(delayOffsetMs = snapped) else r }
         }
@@ -199,6 +209,57 @@ object MultiRoomStateRepository {
             band.gain = gainDb
             dp.setPreEqBandAllChannelsTo(bandIndex, band)
         } catch (_: Throwable) {
+        }
+    }
+
+    // ---- Speaker groups (saved on the phone so they survive restarts) ----
+    private var groupPrefs: SharedPreferences? = null
+
+    /** Called once at app start: loads saved groups. */
+    fun initGroups(context: Context) {
+        val prefs = context.applicationContext.getSharedPreferences("speaker_groups", Context.MODE_PRIVATE)
+        groupPrefs = prefs
+        val loaded = runCatching {
+            val arr = JSONArray(prefs.getString("groups", "[]"))
+            (0 until arr.length()).map { i ->
+                val o = arr.getJSONObject(i)
+                val ids = o.getJSONArray("receiverIds")
+                QuickConnectGroup(
+                    id = o.getString("id"),
+                    name = o.getString("name"),
+                    receiverIds = (0 until ids.length()).map { ids.getString(it) }.toSet()
+                )
+            }
+        }.getOrDefault(emptyList())
+        _groupsFlow.value = loaded
+    }
+
+    private fun saveGroups(groups: List<QuickConnectGroup>) {
+        val arr = JSONArray()
+        groups.forEach { g ->
+            arr.put(JSONObject().put("id", g.id).put("name", g.name).put("receiverIds", JSONArray(g.receiverIds.toList())))
+        }
+        groupPrefs?.edit()?.putString("groups", arr.toString())?.apply()
+    }
+
+    fun saveGroup(id: String?, name: String, receiverIds: Set<String>) {
+        val cleanName = name.trim().ifBlank { "Group" }
+        _groupsFlow.update { list ->
+            val updated = if (id == null) {
+                list + QuickConnectGroup("grp_${UUID.randomUUID().toString().take(8)}", cleanName, receiverIds)
+            } else {
+                list.map { if (it.id == id) it.copy(name = cleanName, receiverIds = receiverIds) else it }
+            }
+            saveGroups(updated)
+            updated
+        }
+    }
+
+    fun deleteGroup(id: String) {
+        _groupsFlow.update { list ->
+            val updated = list.filterNot { it.id == id }
+            saveGroups(updated)
+            updated
         }
     }
 

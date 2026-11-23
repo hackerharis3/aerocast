@@ -84,12 +84,6 @@ class MultiProtocolSinkOrchestrator(
             SinkProtocol.SONOS -> SonosZoneGroupSinkController(receiver.id, ktorServer)
             SinkProtocol.DENON_HEOS -> DenonHeosSinkController(receiver.id, ktorServer)
             SinkProtocol.ROKU -> RokuEcpSinkController(receiver.id, ktorServer)
-            SinkProtocol.FILE_MP3_RECORDER -> SafMp3RecorderSinkController(
-                receiverId = receiver.id,
-                context = context,
-                scope = scope,
-                treeUriProvider = safTreeUriProvider
-            )
             SinkProtocol.SNAPCAST -> snapcastServer
             else -> DlnaSoapSinkController(receiver.id, ktorServer)
         }
