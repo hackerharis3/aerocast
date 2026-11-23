@@ -18,3 +18,7 @@ local.properties
 /build_log.txt
 /*.png
 /build_release_log.txt
+
+# Release signing (keep private, back up both)
+keystore/
+keystore.properties
