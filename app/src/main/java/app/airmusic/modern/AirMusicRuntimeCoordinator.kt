@@ -1,5 +1,9 @@
 package app.airmusic.modern
 
+import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.Job
 import android.content.Context
 import android.net.Uri
 import app.airmusic.modern.automation.HomeAssistantRestAndMqttBridge
@@ -52,6 +56,27 @@ object AirMusicRuntimeCoordinator {
 
     private val activeSinkControllers = ConcurrentHashMap<String, SinkController>()
     private var previousConnectionStates = emptyMap<String, Boolean>()
+    private var previousReceiverStates = emptyMap<String, ReceiverDeviceState>()
+    private val pendingControlJobs = ConcurrentHashMap<String, Job>()
+    private val controlLocks = ConcurrentHashMap<String, Mutex>()
+
+    /**
+     * Push the receiver's *current* volume and mute to its controller. Runs one at a time per
+     * speaker and always reads the latest state, so the last command sent matches the UI even
+     * when slider drags fire many updates.
+     */
+    private fun CoroutineScope.pushVolumeAndMute(receiverId: String, ctrl: SinkController) {
+        pendingControlJobs.remove(receiverId)?.cancel()
+        pendingControlJobs[receiverId] = launch(Dispatchers.IO) {
+            controlLocks.getOrPut(receiverId) { Mutex() }.withLock {
+                ensureActive()
+                val latest = MultiRoomStateRepository.receiversFlow.value.find { it.id == receiverId } ?: return@withLock
+                if (!latest.isConnected) return@withLock
+                ctrl.setMute(latest, latest.isMuted)
+                if (!latest.isMuted) ctrl.setVolume(latest, latest.volumePercent)
+            }
+        }
+    }
     @Volatile
     var persistedSafRecordingTreeUri: Uri? = null
 
@@ -94,24 +119,29 @@ object AirMusicRuntimeCoordinator {
                         launch(Dispatchers.IO) {
                             val ok = runCatching { controller.connect(receiver, metadata) }
                             android.util.Log.i("AirMusicCoordinator", "connect ${receiver.protocol} ${receiver.name} -> $ok")
+                            // Bring the speaker in line with the app's volume/mute right after connecting.
+                            if (ok.getOrNull() == true) pushVolumeAndMute(receiver.id, controller)
                         }
                     } else if (!receiver.isConnected && wasConnected) {
                         activeSinkControllers.remove(receiver.id)?.let { ctrl ->
                             launch(Dispatchers.IO) { ctrl.disconnect(receiver) }
                         }
                     } else if (receiver.isConnected) {
-                        activeSinkControllers[receiver.id]?.let { ctrl ->
+                        // Only push volume/mute when they actually changed, and drop any update still
+                        // queued for this speaker so slider drags send just the latest value.
+                        val prev = previousReceiverStates[receiver.id]
+                        val volumeChanged = prev == null || prev.volumePercent != receiver.volumePercent
+                        val muteChanged = prev == null || prev.isMuted != receiver.isMuted
+                        if (volumeChanged || muteChanged) {
+                            activeSinkControllers[receiver.id]?.let { ctrl -> pushVolumeAndMute(receiver.id, ctrl) }
                             launch(Dispatchers.IO) {
-                                ctrl.setVolume(receiver, receiver.volumePercent)
-                                ctrl.setMute(receiver, receiver.isMuted)
+                                encryptedDataStore.saveReceiverProfile(receiver)
                             }
-                        }
-                        launch(Dispatchers.IO) {
-                            encryptedDataStore.saveReceiverProfile(receiver)
                         }
                     }
                 }
                 previousConnectionStates = receivers.associate { it.id to it.isConnected }
+                previousReceiverStates = receivers.associateBy { it.id }
             }
         }
 

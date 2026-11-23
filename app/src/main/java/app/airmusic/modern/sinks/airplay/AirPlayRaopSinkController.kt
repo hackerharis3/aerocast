@@ -54,6 +54,7 @@ class AirPlayRaopSinkController(
 
     @Volatile private var useEncryption = false
     private val cseqCounter = AtomicInteger(1)
+    private val rtspLock = Any()
     private val sessionId = Random.nextInt(100_000, 999_999).toString()
     private val activeRemoteToken = Random.nextInt(100_000_000, 999_999_999).toString()
     private val dacpIdHex = Random.nextLong().toULong().toString(16).uppercase()
@@ -338,17 +339,24 @@ class AirPlayRaopSinkController(
             }
             val body = "volume: ${String.format(java.util.Locale.US, "%.6f", attenuationDb)}\r\n".toByteArray(StandardCharsets.UTF_8)
             val localIp = KtorLowLatencyAudioServer.resolveLocalLanIpv4()
-            sendRtspRequest(
-                method = "SET_PARAMETER",
-                uri = "rtsp://$localIp/$sessionId",
-                extraHeaders = mapOf("Content-Type" to "text/parameters"),
-                body = body
-            )
+            try {
+                val resp = sendRtspRequest(
+                    method = "SET_PARAMETER",
+                    uri = "rtsp://$localIp/$sessionId",
+                    extraHeaders = mapOf("Content-Type" to "text/parameters"),
+                    body = body
+                )
+                Log.i(TAG, "Volume ${volumePercent}% (${"%.1f".format(java.util.Locale.US, attenuationDb)} dB) -> ${resp.statusCode}")
+            } catch (t: Throwable) {
+                Log.w(TAG, "Volume change failed", t)
+            }
         }
     }
 
     override suspend fun setMute(receiver: ReceiverDeviceState, muted: Boolean) {
-        setVolume(receiver.copy(isMuted = muted), if (muted) 0 else receiver.volumePercent)
+        // AirPlay has no separate mute: mute = -144 dB. Unmuting is handled by the coordinator's
+        // follow-up setVolume, so sending the volume here too would just duplicate it.
+        if (muted) setVolume(receiver.copy(isMuted = true), 0)
     }
 
     override suspend fun updateMetadata(receiver: ReceiverDeviceState, metadata: MediaMetadataState) {
@@ -443,6 +451,8 @@ class AirPlayRaopSinkController(
         extraHeaders: Map<String, String>,
         body: ByteArray?
     ): RtspResponse {
+      synchronized(rtspLock) {
+        // One request/response at a time on the shared RTSP connection.
         val out = rtspOutput ?: return RtspResponse(500, emptyMap())
         val reader = rtspReader ?: return RtspResponse(500, emptyMap())
         val cseq = cseqCounter.getAndIncrement()
@@ -480,6 +490,7 @@ class AirPlayRaopSinkController(
             }
         }
         return RtspResponse(statusCode, headers)
+      }
     }
 
     private fun currentNtpTimestamp(): Pair<Int, Int> {
