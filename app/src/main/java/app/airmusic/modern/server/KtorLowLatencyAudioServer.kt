@@ -109,7 +109,7 @@ class KtorLowLatencyAudioServer(
                 }
 
                 // 3. Endless WAV HTTP Stream for DLNA, Chromecast, Roku (15985), Fire TV, Denon HEOS
-                get("/stream/{token}/{sinkId}/AirMusic.wav") {
+                get("/stream/{token}/{sinkId}/Aerocast.wav") {
                     val sinkId = call.parameters["sinkId"] ?: "default"
                     if (!call.isAuthorizedRequest(sessionToken, sinkId)) {
                         call.respondText("Forbidden", status = HttpStatusCode.Forbidden)
@@ -148,7 +148,7 @@ class KtorLowLatencyAudioServer(
                 }
 
                 // 3b. Endless raw LPCM (audio/L16, big-endian) for DLNA renderers that don't accept WAV.
-                get("/stream/{token}/{sinkId}/AirMusic.l16") {
+                get("/stream/{token}/{sinkId}/Aerocast.l16") {
                     val sinkId = call.parameters["sinkId"] ?: "default"
                     if (!call.isAuthorizedRequest(sessionToken, sinkId)) {
                         call.respondText("Forbidden", status = HttpStatusCode.Forbidden)
@@ -185,7 +185,7 @@ class KtorLowLatencyAudioServer(
                         }
                     }
                 }
-                head("/stream/{token}/{sinkId}/AirMusic.l16") {
+                head("/stream/{token}/{sinkId}/Aerocast.l16") {
                     val sinkId = call.parameters["sinkId"] ?: "default"
                     if (!call.isAuthorizedRequest(sessionToken, sinkId)) {
                         call.respond(HttpStatusCode.Forbidden)
@@ -197,7 +197,7 @@ class KtorLowLatencyAudioServer(
                 }
 
                 // DLNA renderers probe the stream with HEAD before GET; answer with headers only.
-                head("/stream/{token}/{sinkId}/AirMusic.wav") {
+                head("/stream/{token}/{sinkId}/Aerocast.wav") {
                     val sinkId = call.parameters["sinkId"] ?: "default"
                     if (!call.isAuthorizedRequest(sessionToken, sinkId)) {
                         call.respond(HttpStatusCode.Forbidden)
@@ -207,7 +207,7 @@ class KtorLowLatencyAudioServer(
                     call.response.header("ContentFeatures.DLNA.ORG", "DLNA.ORG_PN=WAV;DLNA.ORG_OP=00;DLNA.ORG_CI=1")
                     call.respond(StreamHeadResponse(ContentType.parse("audio/wav")))
                 }
-                head("/stream/{token}/{sinkId}/AirMusic.mp3") {
+                head("/stream/{token}/{sinkId}/Aerocast.mp3") {
                     val sinkId = call.parameters["sinkId"] ?: "default"
                     if (!call.isAuthorizedRequest(sessionToken, sinkId)) {
                         call.respond(HttpStatusCode.Forbidden)
@@ -217,7 +217,7 @@ class KtorLowLatencyAudioServer(
                 }
 
                 // 4. Endless 320 kbps MP3 Stream with Optional Shoutcast ICY Metadata (SONOS / DLNA)
-                get("/stream/{token}/{sinkId}/AirMusic.mp3") {
+                get("/stream/{token}/{sinkId}/Aerocast.mp3") {
                     val sinkId = call.parameters["sinkId"] ?: "default"
                     if (!call.isAuthorizedRequest(sessionToken, sinkId)) {
                         call.respondText("Forbidden", status = HttpStatusCode.Forbidden)
@@ -227,7 +227,7 @@ class KtorLowLatencyAudioServer(
                     val wantsIcy = call.request.headers["Icy-MetaData"] == "1"
                     if (wantsIcy) {
                         call.response.header("icy-metaint", IcyMetadataChunkWriter.DEFAULT_ICY_METAINT.toString())
-                        call.response.header("icy-name", "AirMusic Modern Live Stream")
+                        call.response.header("icy-name", "Aerocast Live Stream")
                     }
                     call.response.header("Cache-Control", "no-cache, no-store")
 
@@ -292,14 +292,14 @@ class KtorLowLatencyAudioServer(
         val ip = resolveLocalLanIpv4()
         val settings = MultiRoomStateRepository.settingsFlow.value
         val useMp3Fallback = settings.adaptiveBitrateOnLowWifi && isWifiSignalWeak()
-        val ext = if (preferWav && !useMp3Fallback) "AirMusic.wav" else "AirMusic.mp3"
+        val ext = if (preferWav && !useMp3Fallback) "Aerocast.wav" else "Aerocast.mp3"
         return "http://$ip:$listenPort/stream/$sessionToken/$sinkId/$ext"
     }
 
     /** Raw big-endian LPCM stream URL (audio/L16) for DLNA renderers. */
     fun buildAuthorizedLpcmStreamUrl(sinkId: String): String {
         val ip = resolveLocalLanIpv4()
-        return "http://$ip:$listenPort/stream/$sessionToken/$sinkId/AirMusic.l16"
+        return "http://$ip:$listenPort/stream/$sessionToken/$sinkId/Aerocast.l16"
     }
 
     fun buildQrWebListenUrl(): String {
@@ -368,7 +368,7 @@ class KtorLowLatencyAudioServer(
             <head>
                 <meta charset="UTF-8" />
                 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-                <title>AirMusic Modern • Sub-50ms Live Stream</title>
+                <title>Aerocast • Sub-50ms Live Stream</title>
                 <style>
                     body { font-family: system-ui, sans-serif; background: #121212; color: #FFFFFF; display: flex; align-items: center; justify-content: center; min-height: 100vh; margin: 0; }
                     .card { background: #1E1E1E; padding: 28px; border-radius: 20px; max-width: 420px; width: 90%; text-align: center; box-shadow: 0 12px 32px rgba(0,0,0,0.45); }

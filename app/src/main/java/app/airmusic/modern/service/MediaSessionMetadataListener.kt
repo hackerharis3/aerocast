@@ -63,7 +63,7 @@ class MediaSessionMetadataListener : NotificationListenerService() {
         val meta = controller.metadata ?: return
 
         val title = meta.getString(MediaMetadata.METADATA_KEY_TITLE)
-            ?.takeIf { it.isNotBlank() } ?: "AirMusic Live Stream"
+            ?.takeIf { it.isNotBlank() } ?: "Aerocast Live Stream"
         val artist = meta.getString(MediaMetadata.METADATA_KEY_ARTIST)
             ?.takeIf { it.isNotBlank() } ?: "System Audio"
         val album = meta.getString(MediaMetadata.METADATA_KEY_ALBUM).orEmpty()

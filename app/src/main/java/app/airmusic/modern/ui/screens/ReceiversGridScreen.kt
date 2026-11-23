@@ -82,7 +82,7 @@ fun ReceiversGridScreen(
         if (receivers.isEmpty()) {
             item(span = { GridItemSpan(maxLineSpan) }) {
                 Text(
-                    text = "No speakers found yet. AirMusic scans your Wi-Fi for AirPlay, Cast, " +
+                    text = "No speakers found yet. Aerocast scans your Wi-Fi for AirPlay, Cast, " +
                         "Sonos, DLNA, HEOS, Roku and Snapcast devices. Make sure this phone is on " +
                         "the same network, or add an AirPlay speaker manually.",
                     style = MaterialTheme.typography.bodyMedium,

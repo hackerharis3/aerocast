@@ -368,7 +368,7 @@ class AirPlayRaopSinkController(
             val dmapBytes = crypto.buildDmapMetadataPayload(
                 title = metadata.title,
                 artist = metadata.artist,
-                album = metadata.album.ifBlank { "AirMusic Modern" }
+                album = metadata.album.ifBlank { "Aerocast" }
             )
             sendRtspRequest(
                 method = "SET_PARAMETER",

@@ -195,7 +195,7 @@ open class DlnaSoapSinkController(
                     <dc:title>${xmlEscape(metadata.title)}</dc:title>
                     <dc:creator>${xmlEscape(metadata.artist)}</dc:creator>
                     <upnp:class>$didlUpnpClass</upnp:class>
-                    <upnp:album>${xmlEscape(metadata.album.ifBlank { "AirMusic Live" })}</upnp:album>
+                    <upnp:album>${xmlEscape(metadata.album.ifBlank { "Aerocast Live" })}</upnp:album>
                     <upnp:artist>${xmlEscape(metadata.artist)}</upnp:artist>
                     <upnp:albumArtURI>${xmlEscape(artUrl)}</upnp:albumArtURI>
                     <res protocolInfo="$protocolInfo">${xmlEscape(streamUrl)}</res>

@@ -21,7 +21,7 @@ data class AudioCaptureSessionConfig(
 )
 
 data class MediaMetadataState(
-    val title: String = "AirMusic Live Stream",
+    val title: String = "Aerocast Live Stream",
     val artist: String = "System Audio",
     val album: String = "",
     val sourcePackage: String = "",

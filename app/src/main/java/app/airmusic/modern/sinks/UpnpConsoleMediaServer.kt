@@ -24,12 +24,12 @@ class UpnpConsoleMediaServer(
             clientUserAgent.contains("FDSSDP", ignoreCase = true)
 
         val friendlyName = if (isXboxOrWindows) {
-            "AirMusic (${Build.MODEL}): 1 : Windows Media Connect"
+            "Aerocast (${Build.MODEL}): 1 : Windows Media Connect"
         } else {
-            "AirMusic Modern (${Build.MODEL})"
+            "Aerocast (${Build.MODEL})"
         }
-        val manufacturer = if (isXboxOrWindows) "Microsoft Corporation" else "AirMusic Modern"
-        val modelName = if (isXboxOrWindows) "Windows Media Player Sharing" else "AirMusic UPnP MediaServer"
+        val manufacturer = if (isXboxOrWindows) "Microsoft Corporation" else "Aerocast"
+        val modelName = if (isXboxOrWindows) "Windows Media Player Sharing" else "Aerocast UPnP MediaServer"
         val modelNumber = if (isXboxOrWindows) "12.0" else "2.0"
 
         return """
@@ -74,13 +74,13 @@ class UpnpConsoleMediaServer(
                        xmlns:upnp="urn:schemas-upnp-org:metadata-1-0/upnp/">
                 <item id="track_wav" parentID="0" restricted="1">
                     <dc:title>Live Audio (WAV Lossless)</dc:title>
-                    <dc:creator>AirMusic Modern</dc:creator>
+                    <dc:creator>Aerocast</dc:creator>
                     <upnp:class>object.item.audioItem.musicTrack</upnp:class>
                     <res protocolInfo="http-get:*:audio/wav:DLNA.ORG_PN=WAV;DLNA.ORG_OP=00;DLNA.ORG_CI=1">$wavUrl</res>
                 </item>
                 <item id="track_mp3" parentID="0" restricted="1">
                     <dc:title>Live Audio (MP3 320 kbps)</dc:title>
-                    <dc:creator>AirMusic Modern</dc:creator>
+                    <dc:creator>Aerocast</dc:creator>
                     <upnp:class>object.item.audioItem.musicTrack</upnp:class>
                     <res protocolInfo="http-get:*:audio/mpeg:DLNA.ORG_PN=MP3;DLNA.ORG_OP=00;DLNA.ORG_CI=1">$mp3Url</res>
                 </item>

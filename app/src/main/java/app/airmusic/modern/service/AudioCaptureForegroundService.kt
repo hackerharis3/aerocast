@@ -163,14 +163,14 @@ class AudioCaptureForegroundService : Service() {
     private fun acquireLocks() {
         if (wakeLock == null) {
             val pm = getSystemService(PowerManager::class.java)
-            wakeLock = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "AirMusicModern::AudioCaptureWakeLock").apply {
+            wakeLock = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "Aerocast::AudioCaptureWakeLock").apply {
                 setReferenceCounted(false)
                 acquire()
             }
         }
         if (multicastLock == null) {
             val wm = applicationContext.getSystemService(WifiManager::class.java)
-            multicastLock = wm.createMulticastLock("AirMusicModern::MulticastDiscoveryLock").apply {
+            multicastLock = wm.createMulticastLock("Aerocast::MulticastDiscoveryLock").apply {
                 setReferenceCounted(false)
                 acquire()
             }

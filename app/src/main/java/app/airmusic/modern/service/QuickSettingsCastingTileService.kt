@@ -36,13 +36,13 @@ class QuickSettingsCastingTileService : TileService() {
         val activeReceivers = MultiRoomStateRepository.receiversFlow.value.filter { it.isConnected }
         if (activeReceivers.isNotEmpty()) {
             tile.state = Tile.STATE_ACTIVE
-            tile.label = "AirMusic (${activeReceivers.size})"
+            tile.label = "Aerocast (${activeReceivers.size})"
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                 tile.subtitle = activeReceivers.joinToString(", ") { it.displayTitle }
             }
         } else {
             tile.state = Tile.STATE_INACTIVE
-            tile.label = "AirMusic Cast"
+            tile.label = "Aerocast"
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                 tile.subtitle = "Tap to Quick-Connect"
             }

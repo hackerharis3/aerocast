@@ -42,7 +42,7 @@
         android:fullBackupContent="false"
         android:icon="@mipmap/ic_launcher"
         android:roundIcon="@mipmap/ic_launcher_round"
-        android:label="AirMusic Modern"
+        android:label="Aerocast"
         android:supportsRtl="true"
         android:theme="@style/Theme.AppCompat.DayNight.NoActionBar"
         android:usesCleartextTraffic="true">
@@ -83,7 +83,7 @@
             android:enabled="true"
             android:exported="true"
             android:icon="@drawable/ic_stat_airmusic"
-            android:label="AirMusic Cast"
+            android:label="Aerocast"
             android:permission="android.permission.BIND_QUICK_SETTINGS_TILE">
             <intent-filter>
                 <action android:name="android.service.quicksettings.action.QS_TILE" />
@@ -94,7 +94,7 @@
         <receiver
             android:name=".widget.AirMusicGlanceWidgetReceiver"
             android:exported="true"
-            android:label="AirMusic Quick-Connect">
+            android:label="Aerocast Quick-Connect">
             <intent-filter>
                 <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
             </intent-filter>

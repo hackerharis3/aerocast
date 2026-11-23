@@ -17,7 +17,7 @@ class AirMusicModernApp : Application() {
     private fun createNotificationChannel() {
         val channel = NotificationChannel(
             NOTIFICATION_CHANNEL_ID,
-            "AirMusic Live Audio Casting",
+            "Aerocast live audio casting",
             NotificationManager.IMPORTANCE_LOW
         ).apply {
             description = "Persistent multi-room wireless audio capture and volume controls"

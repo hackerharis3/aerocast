@@ -246,7 +246,7 @@ class HomeAssistantRestAndMqttBridge(
 
     private fun buildHomeAssistantDiscoveryJson(): String {
         return JSONObject().apply {
-            put("name", "AirMusic Modern Multi-Room Caster")
+            put("name", "Aerocast Multi-Room Caster")
             put("unique_id", "airmusic_modern_caster_01")
             put("state_topic", TOPIC_STATE)
             put("command_topic", TOPIC_COMMAND)

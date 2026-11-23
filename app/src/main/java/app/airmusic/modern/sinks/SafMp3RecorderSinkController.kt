@@ -41,7 +41,7 @@ class SafMp3RecorderSinkController(
         val docTreeId = DocumentsContract.getTreeDocumentId(treeUri)
         val parentDocUri = DocumentsContract.buildDocumentUriUsingTree(treeUri, docTreeId)
         val timestamp = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd-HH-mm-ss"))
-        val fileName = "AirMusic-$timestamp.mp3"
+        val fileName = "Aerocast-$timestamp.mp3"
 
         val targetFileUri = DocumentsContract.createDocument(
             resolver,

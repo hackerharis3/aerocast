@@ -58,7 +58,7 @@ class AirMusicGlanceWidget : GlanceAppWidget() {
             verticalAlignment = Alignment.CenterVertically
         ) {
             Text(
-                text = "AirMusic • ${if (activeReceivers.isNotEmpty()) "${activeReceivers.size} Speakers Active" else "Idle"}",
+                text = "Aerocast • ${if (activeReceivers.isNotEmpty()) "${activeReceivers.size} Speakers Active" else "Idle"}",
                 style = TextStyle(
                     color = GlanceTheme.colors.primary,
                     fontSize = 12.sp,

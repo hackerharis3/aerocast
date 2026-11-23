@@ -170,7 +170,6 @@ fun AdaptiveAirMusicAppShell(
         NavTab("App Isolation", Icons.Filled.Apps, Icons.Outlined.Apps),
         NavTab("Settings", Icons.Filled.Settings, Icons.Outlined.Settings)
     )
-    val connectedCount = receivers.count { it.isConnected }
 
     BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
         val useTabletNavigationRail = maxWidth >= 600.dp
@@ -179,7 +178,7 @@ fun AdaptiveAirMusicAppShell(
             topBar = {
                 TopAppBar(
                     title = {
-                        Text("AirMusic Modern • $connectedCount Active Speakers")
+                        Text("Aerocast")
                     }
                 )
             },
