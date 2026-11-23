@@ -55,6 +55,8 @@ class AirPlayRaopSinkController(
     @Volatile private var useEncryption = false
     private val cseqCounter = AtomicInteger(1)
     private val rtspLock = Any()
+    @Volatile private var resendRequests = 0
+    @Volatile private var resendPackets = 0
     private val sessionId = Random.nextInt(100_000, 999_999).toString()
     private val activeRemoteToken = Random.nextInt(100_000_000, 999_999_999).toString()
     private val dacpIdHex = Random.nextLong().toULong().toString(16).uppercase()
@@ -202,6 +204,11 @@ class AirPlayRaopSinkController(
             var packetsSinceLastSync = 0
             val alacBuf = ByteArray(NativeAudioEngine.ALAC_PACKET_SIZE_BYTES)
             val ssrc = Random.nextInt()
+            var lastSendNs = 0L
+            var maxGapMs = 0L
+            // Smooth timeline: packet N is due at streamStartNs + N*352/44100 s, regardless of the
+            // bursts in which Android delivers captured audio.
+            var streamStartNs = 0L
 
             while (isActive) {
                 val alacLen = NativeAudioEngine.nativeReadProcessedSinkPacket(
@@ -226,16 +233,33 @@ class AirPlayRaopSinkController(
                         .array()
 
                     rtpPacketCache.put(rtpSeq and 0xFFFF, rtpPacket)
+                    if (streamStartNs == 0L) {
+                        streamStartNs = System.nanoTime()
+                        // RAOP expects a sync packet (with the extension bit, 0x90) before audio starts.
+                        sendRtpSyncBeacon(controlSock, targetAddr, rtpTimestamp, streamStartNs, first = true)
+                    }
                     audioSock.send(DatagramPacket(rtpPacket, rtpPacket.size, targetAddr, remoteServerPort))
+                    val nowNs = System.nanoTime()
+                    if (lastSendNs != 0L) maxGapMs = maxOf(maxGapMs, (nowNs - lastSendNs) / 1_000_000)
+                    lastSendNs = nowNs
 
-                    // Every 125 packets (~1.0 second), send an RTP-to-NTP Sync packet (0x80 0xD4)
+                    // Every 125 packets (~1.0 s), send a sync packet on the smooth timeline. Re-anchor only
+                    // if capture has drifted far from it (audio clock vs system clock), which is rare.
                     if (packetsSinceLastSync >= 125) {
-                        sendRtpSyncBeacon(controlSock, targetAddr, rtpTimestamp)
+                        val idealNs = streamStartNs + rtpTimestamp * 1_000_000_000L / SAMPLE_RATE
+                        val driftMs = (nowNs - idealNs) / 1_000_000
+                        if (driftMs > MAX_DRIFT_MS || driftMs < -MAX_DRIFT_MS) {
+                            Log.w(TAG, "Capture drifted ${driftMs} ms from the timeline; re-anchoring")
+                            streamStartNs = nowNs - rtpTimestamp * 1_000_000_000L / SAMPLE_RATE
+                        }
+                        sendRtpSyncBeacon(controlSock, targetAddr, rtpTimestamp,
+                            streamStartNs + rtpTimestamp * 1_000_000_000L / SAMPLE_RATE, first = false)
                         packetsSinceLastSync = 0
                     }
 
                     if (rtpTimestamp % (352L * 500L) == 0L) {
-                        Log.i(TAG, "RTP audio: sent ${rtpTimestamp / 352L + 1} packets (${alacLen}B ALAC) to port $remoteServerPort")
+                        Log.i(TAG, "RTP audio: sent ${rtpTimestamp / 352L + 1} packets, longest pause ${maxGapMs} ms, resend requests $resendRequests")
+                        maxGapMs = 0
                     }
                     rtpSeq = (rtpSeq + 1) and 0xFFFF
                     rtpTimestamp += 352L
@@ -247,15 +271,26 @@ class AirPlayRaopSinkController(
         }
     }
 
-    private fun sendRtpSyncBeacon(controlSock: DatagramSocket, targetAddr: InetAddress, rtpTimestamp: Long) {
+    /**
+     * Sync packet: "at NTP time [atNs] the sender is at [rtpTimestamp]; play [rtpTimestamp] - latency now".
+     * The latency is the speaker's playback buffer. 1 s absorbs capture bursts (up to ~60 ms seen on
+     * device) and leaves time for retransmits of lost Wi-Fi packets; 0.25 s caused audible clicks.
+     */
+    private fun sendRtpSyncBeacon(
+        controlSock: DatagramSocket,
+        targetAddr: InetAddress,
+        rtpTimestamp: Long,
+        atNs: Long,
+        first: Boolean
+    ) {
         try {
-            val (ntpSec, ntpFrac) = currentNtpTimestamp()
+            val (ntpSec, ntpFrac) = ntpAt(atNs)
             val syncPacket = ByteBuffer.allocate(20)
                 .order(ByteOrder.BIG_ENDIAN)
-                .put(0x80.toByte())
+                .put(if (first) 0x90.toByte() else 0x80.toByte())
                 .put(0xD4.toByte())
                 .putShort(7)
-                .putInt(((rtpTimestamp - 11025L) and 0xFFFFFFFFL).toInt())
+                .putInt(((rtpTimestamp - LATENCY_FRAMES) and 0xFFFFFFFFL).toInt())
                 .putInt(ntpSec)
                 .putInt(ntpFrac)
                 .putInt((rtpTimestamp and 0xFFFFFFFFL).toInt())
@@ -282,6 +317,12 @@ class AirPlayRaopSinkController(
                         val firstSeq = bb.short.toInt() and 0xFFFF
                         val count = (bb.short.toInt() and 0xFFFF).coerceIn(1, 64)
 
+                        resendRequests++
+                        resendPackets += count
+                        if (resendRequests <= 5 || resendRequests % 20 == 0) {
+                            Log.w(TAG, "Speaker asked to resend $count packet(s) from seq $firstSeq " +
+                                "(requests so far: $resendRequests, packets: $resendPackets)")
+                        }
                         for (i in 0 until count) {
                             val seq = (firstSeq + i) and 0xFFFF
                             val cachedRtp = rtpPacketCache.get(seq) ?: continue
@@ -493,12 +534,24 @@ class AirPlayRaopSinkController(
       }
     }
 
-    private fun currentNtpTimestamp(): Pair<Int, Int> {
-        val nowMs = System.currentTimeMillis()
-        val ntpSeconds = ((nowMs / 1000L) + 2208988800L).toInt()
-        val ntpFraction = (((nowMs % 1000L) * 4294967296L) / 1000L).toInt()
-        return ntpSeconds to ntpFraction
+    // NTP clock for timing replies and sync packets: anchored to wall time once, then advanced by the
+    // monotonic nanosecond clock, so it never jumps (wall-clock adjustments) and has sub-ms precision.
+    private val clockBaseWallMs = System.currentTimeMillis()
+    private val clockBaseNs = System.nanoTime()
+
+    private fun ntpAt(ns: Long): Pair<Int, Int> {
+        val totalNs = clockBaseWallMs * 1_000_000L + (ns - clockBaseNs)
+        val seconds = totalNs / 1_000_000_000L + 2208988800L
+        val fraction = ((totalNs % 1_000_000_000L) shl 32) / 1_000_000_000L
+        return seconds.toInt() to fraction.toInt()
     }
 
-    private companion object { const val TAG = "AirMusicAirPlay" }
+    private fun currentNtpTimestamp(): Pair<Int, Int> = ntpAt(System.nanoTime())
+
+    private companion object {
+        const val TAG = "AirMusicAirPlay"
+        const val SAMPLE_RATE = 44_100L
+        const val LATENCY_FRAMES = 44_100L      // 1 s speaker buffer
+        const val MAX_DRIFT_MS = 400L
+    }
 }
