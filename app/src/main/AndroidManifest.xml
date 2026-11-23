@@ -3,9 +3,9 @@
 
     <!-- Remediates SEC-02: Custom signature permission for internal cross-component IPC -->
     <permission
-        android:name="app.airmusic.modern.PERMISSION_INTERNAL_IPC"
+        android:name="${applicationId}.PERMISSION_INTERNAL_IPC"
         android:protectionLevel="signature" />
-    <uses-permission android:name="app.airmusic.modern.PERMISSION_INTERNAL_IPC" />
+    <uses-permission android:name="${applicationId}.PERMISSION_INTERNAL_IPC" />
 
     <!-- Core Networking & Multicast Discovery -->
     <uses-permission android:name="android.permission.INTERNET" />
@@ -105,7 +105,7 @@
         <!-- Remediates SEC-03: Scoped strictly to <cache-path> -->
         <provider
             android:name="androidx.core.content.FileProvider"
-            android:authorities="app.airmusic.modern.fileprovider"
+            android:authorities="${applicationId}.fileprovider"
             android:exported="false"
             android:grantUriPermissions="true">
             <meta-data

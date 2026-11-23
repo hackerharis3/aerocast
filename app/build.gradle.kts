@@ -12,7 +12,7 @@ android {
     ndkVersion = "28.2.13676358"
 
     defaultConfig {
-        applicationId = "app.airmusic.modern"
+        applicationId = "io.github.hackerharis3.aerocast"
         minSdk = 30 // Android 11 (R) baseline
         targetSdk = 35 // Android 15 (VanillaIceCream)
         versionCode = 1
