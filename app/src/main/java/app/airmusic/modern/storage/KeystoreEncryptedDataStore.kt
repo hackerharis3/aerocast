@@ -84,6 +84,9 @@ class KeystoreEncryptedDataStore(private val context: Context) {
         val savedVol = prefs[intPreferencesKey("vol_${receiver.id}")] ?: receiver.volumePercent
         val savedDelay = prefs[intPreferencesKey("delay_${receiver.id}")] ?: receiver.delayOffsetMs
         val savedMono = prefs[booleanPreferencesKey("mono_${receiver.id}")] ?: receiver.stereoToMono
+        val savedCodec = prefs[stringPreferencesKey("codec_${receiver.id}")]
+            ?.let { name -> receiver.protocol.supportedCodecs.find { it.name == name } }
+            ?: receiver.activeCodec
         val savedEqOn = prefs[booleanPreferencesKey("eq_on_${receiver.id}")] ?: receiver.eqEnabled
         val savedPresetName = prefs[stringPreferencesKey("eq_preset_${receiver.id}")]
         val savedPreset = savedPresetName?.let {
@@ -104,6 +107,7 @@ class KeystoreEncryptedDataStore(private val context: Context) {
             alias = savedAlias,
             volumePercent = savedVol,
             delayOffsetMs = savedDelay,
+            activeCodec = savedCodec,
             stereoToMono = savedMono,
             eqEnabled = savedEqOn,
             eqPreset = savedPreset,

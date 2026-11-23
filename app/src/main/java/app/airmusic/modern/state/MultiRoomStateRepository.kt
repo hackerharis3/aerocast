@@ -292,6 +292,11 @@ object MultiRoomStateRepository {
     }
 
 
+    /** Replace a speaker's state with its saved settings (alias, volume, delay, format, mono, EQ). */
+    fun applySavedProfile(receiverId: String, restore: (ReceiverDeviceState) -> ReceiverDeviceState) {
+        _receiversFlow.update { list -> list.map { if (it.id == receiverId) restore(it) else it } }
+    }
+
     fun upsertDiscoveredReceiver(
         id: String,
         name: String,

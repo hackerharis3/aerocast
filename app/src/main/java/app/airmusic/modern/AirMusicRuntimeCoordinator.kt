@@ -57,6 +57,10 @@ object AirMusicRuntimeCoordinator {
     private val activeSinkControllers = ConcurrentHashMap<String, SinkController>()
     private var previousConnectionStates = emptyMap<String, Boolean>()
     private var previousReceiverStates = emptyMap<String, ReceiverDeviceState>()
+    // Speakers whose saved settings have been loaded. Only these get saved, so defaults never
+    // overwrite saved settings before they are restored.
+    private val restoredProfileIds = java.util.Collections.synchronizedSet(mutableSetOf<String>())
+    private val profileRestoreStarted = mutableSetOf<String>()
     // DSP curve is -40 dB * (1 - p/100), so 85 = -6 dB of headroom.
     private const val DSP_HEADROOM_PERCENT = 85
     private val pendingControlJobs = ConcurrentHashMap<String, Job>()
@@ -115,6 +119,42 @@ object AirMusicRuntimeCoordinator {
             MultiRoomStateRepository.receiversFlow.collect { receivers ->
                 val metadata = MediaSessionMetadataListener.metadataFlow.value
                 receivers.forEach { receiver ->
+                    // First time we see a speaker: load its saved settings.
+                    if (profileRestoreStarted.add(receiver.id)) {
+                        launch(Dispatchers.IO) {
+                            runCatching {
+                                val saved = encryptedDataStore.applySavedProfileToReceiver(receiver)
+                                MultiRoomStateRepository.applySavedProfile(receiver.id) { current ->
+                                    current.copy(
+                                        alias = saved.alias,
+                                        volumePercent = saved.volumePercent,
+                                        delayOffsetMs = saved.delayOffsetMs,
+                                        activeCodec = saved.activeCodec,
+                                        stereoToMono = saved.stereoToMono,
+                                        eqEnabled = saved.eqEnabled,
+                                        eqPreset = saved.eqPreset,
+                                        eqBands = saved.eqBands
+                                    )
+                                }
+                            }.onFailure { android.util.Log.w("AirMusicCoordinator", "restore ${receiver.id} failed", it) }
+                            restoredProfileIds.add(receiver.id)
+                        }
+                    } else if (receiver.id in restoredProfileIds) {
+                        val prev = previousReceiverStates[receiver.id]
+                        if (prev != null && (
+                                prev.alias != receiver.alias ||
+                                prev.volumePercent != receiver.volumePercent ||
+                                prev.delayOffsetMs != receiver.delayOffsetMs ||
+                                prev.activeCodec != receiver.activeCodec ||
+                                prev.stereoToMono != receiver.stereoToMono ||
+                                prev.eqEnabled != receiver.eqEnabled ||
+                                prev.eqPreset != receiver.eqPreset ||
+                                prev.eqBands != receiver.eqBands)
+                        ) {
+                            launch(Dispatchers.IO) { runCatching { encryptedDataStore.saveReceiverProfile(receiver) } }
+                        }
+                    }
+
                     // Push EQ / limiter / mono to the native per-speaker DSP whenever they change.
                     // The DSP applies a fixed -6 dB of headroom instead of a volume: Android captures
                     // system audio at full scale, and loud masters sat within 0.3 dB of digital maximum,
@@ -167,7 +207,6 @@ object AirMusicRuntimeCoordinator {
                             android.util.Log.i("AirMusicCoordinator", "reconnect ${receiver.protocol} ${receiver.name} as ${receiver.activeCodec} -> $ok")
                             if (ok.getOrNull() == true) pushVolumeAndMute(receiver.id, controller)
                         }
-                        launch(Dispatchers.IO) { encryptedDataStore.saveReceiverProfile(receiver) }
                     } else if (receiver.isConnected) {
                         // Only push volume/mute when they actually changed, and drop any update still
                         // queued for this speaker so slider drags send just the latest value.
@@ -176,9 +215,6 @@ object AirMusicRuntimeCoordinator {
                         val muteChanged = prev == null || prev.isMuted != receiver.isMuted
                         if (volumeChanged || muteChanged) {
                             activeSinkControllers[receiver.id]?.let { ctrl -> pushVolumeAndMute(receiver.id, ctrl) }
-                            launch(Dispatchers.IO) {
-                                encryptedDataStore.saveReceiverProfile(receiver)
-                            }
                         }
                     }
                 }
